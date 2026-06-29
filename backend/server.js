@@ -31,7 +31,7 @@ app.listen(5000, () => {
 // REGISTER
 
 app.post("/register", (req, res) => {
-    const { fullname, email, password} = req.body;
+    const { fullname, email, password,phone, location} = req.body;
     // CHECK IF EMAIL EXISTS
 
     const checkEmail = "SELECT * FROM users WHERE email = ?";
@@ -48,8 +48,8 @@ app.post("/register", (req, res) => {
                 return res.status(500).json(err);
             }
             const role = "customer";
-            const insertUser = "INSERT INTO users (fullname, email, password, role) VALUES (?, ?, ?, ?)";
-            db.query(insertUser, [fullname, email, hash, role], (err, result) => {
+            const insertUser = "INSERT INTO users (fullname, email, password, phone, location, role) VALUES (?, ?, ?, ?, ?, ?)";
+            db.query(insertUser, [fullname, email, hash, phone, location, role], (err, result) => {
                 if (err) {
                     return  res.status(500).json(err);
                 }
@@ -135,50 +135,48 @@ app.post("/add-to-cart", (req, res) => {
   });
 });
 
-app.get("/orders",(req,res)=>{
+app.get("/orders", (req, res) => {
 
-const sql=`
+    const sql = `
+    SELECT 
+        orders.order_id,
+        orders.order_date,
+        orders.payment_status,
 
-SELECT
-o.order_id,
-o.order_date,
-o.payment_status,
+        users.fullname,
+        users.email,
+        users.phone,
+        users.location,
 
-u.fullname,
-u.email,
+        products.product_name,
 
-p.product_name,
-oi.quantity
+        order_items.quantity
 
-FROM orders o
+    FROM orders
 
-INNER JOIN users u
-ON o.user_id=u.user_id
+    JOIN users 
+    ON orders.user_id = users.user_id
 
-INNER JOIN order_items oi
-ON o.order_id=oi.order_id
+    JOIN order_items
+    ON orders.order_id = order_items.order_id
 
-INNER JOIN products p
-ON oi.product_id=p.product_id
+    JOIN products
+    ON order_items.product_id = products.product_id
 
-ORDER BY o.order_id DESC
-
-`;
-
-db.query(sql,(err,result)=>{
-
-if(err){
-console.log(err);
-
-return res.status(500).json({
-message:"Cannot fetch orders"
-});
-}
+    ORDER BY orders.order_date DESC
+    `;
 
 
-res.json(result);
+    db.query(sql, (err, result) => {
 
-});
+        if(err){
+            return res.status(500).json(err);
+        }
+
+
+        res.json(result);
+
+    });
 
 });
 

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Header from "./components/Header";
 import Home from "./components/Home";
 import Cart from "./components/Cart";
@@ -8,17 +9,20 @@ import AdminProducts from "./components/AdminProducts";
 import AdminOrders from "./components/AdminOrders";
 import AdminUsers from "./components/AdminUsers";
 import Garaly from "./components/Garaly";
+import Footer from "./components/Footer";
+import AboutUs from "./components/AboutUs";
 import { Routes, Route } from "react-router-dom";
 
 export default function App() {
+
   const [cartItems, setCartItems] = useState([]);
   const [message, setMessage] = useState("");
 
-  // =========================
-  // LOAD CART FROM LOCALSTORAGE
-  // =========================
+
+  // LOAD CART
   useEffect(() => {
     const saved = localStorage.getItem("cart");
+
     if (saved) {
       try {
         setCartItems(JSON.parse(saved));
@@ -27,130 +31,260 @@ export default function App() {
         localStorage.removeItem("cart");
       }
     }
+
   }, []);
 
-  // =========================
-  // SAVE CART TO LOCALSTORAGE
-  // =========================
+
+
+  // SAVE CART
   useEffect(() => {
     localStorage.setItem("cart", JSON.stringify(cartItems));
   }, [cartItems]);
 
-  // =========================
-  // MESSAGE HANDLER
-  // =========================
+
+
+  // MESSAGE
   const showMessage = (text) => {
     setMessage(text);
-    setTimeout(() => setMessage(""), 3000);
+
+    setTimeout(() => {
+      setMessage("");
+    }, 3000);
   };
 
-  // =========================
-  // ADD TO CART (SAFE VERSION)
-  // =========================
+
+
+  // ADD TO CART
   const addToCart = (product) => {
-  setCartItems((prev) => {
-    const product_id = product.product_id;
 
-    const exist = prev.find((item) => item.product_id === product_id);
+    setCartItems((prev) => {
 
-    if (exist) {
-      return prev.map((item) =>
-        item.product_id === product_id
-          ? { ...item, qty: item.qty + 1 }
-          : item
+      const product_id = product.product_id;
+
+      const exist = prev.find(
+        (item) => item.product_id === product_id
       );
-    }
 
-    return [
-      ...prev,
-      {
-        product_id,
-        name: product.name,
-        price: product.price,
-        image: product.image,
-        qty: 1,
-      },
-    ];
-  });
-};
 
-  // =========================
-  // REMOVE FROM CART
-  // =========================
-  const removeFromCart = (product_id) => {
-    setCartItems((prev) =>
-      prev.filter((item) => item.product_id !== product_id)
-    );
-    showMessage("Removed from cart");
+      if (exist) {
+
+        return prev.map((item) =>
+          item.product_id === product_id
+            ? {
+                ...item,
+                qty: item.qty + 1
+              }
+            : item
+        );
+
+      }
+
+
+      return [
+        ...prev,
+        {
+          product_id,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          qty: 1,
+        }
+      ];
+
+    });
+
   };
 
-  // =========================
-  // INCREASE QTY
-  // =========================
+
+
+  // REMOVE CART ITEM
+  const removeFromCart = (product_id) => {
+
+    setCartItems((prev) =>
+      prev.filter(
+        (item) => item.product_id !== product_id
+      )
+    );
+
+    showMessage("Removed from cart");
+
+  };
+
+
+
+  // INCREASE QUANTITY
   const increaseQty = (product_id) => {
+
     setCartItems((prev) =>
       prev.map((item) =>
         item.product_id === product_id
-          ? { ...item, qty: item.qty + 1 }
+          ? {
+              ...item,
+              qty: item.qty + 1
+            }
           : item
       )
     );
+
   };
 
-  // =========================
-  // DECREASE QTY
-  // =========================
+
+
+  // DECREASE QUANTITY
   const decreaseQty = (product_id) => {
+
     setCartItems((prev) =>
       prev
         .map((item) =>
           item.product_id === product_id
-            ? { ...item, qty: item.qty - 1 }
+            ? {
+                ...item,
+                qty: item.qty - 1
+              }
             : item
         )
         .filter((item) => item.qty > 0)
     );
+
   };
 
+
+
   return (
-    <>
-      {/* GLOBAL MESSAGE */}
+
+    <div className="min-h-screen flex flex-col">
+
+
+      {/* MESSAGE */}
       {message && (
-        <div className="fixed top-20 right-5 bg-green-600 text-white px-4 py-2 rounded shadow-lg z-50">
+
+        <div className="
+          fixed 
+          top-20 
+          right-5 
+          bg-green-600 
+          text-white 
+          px-4 
+          py-2 
+          rounded 
+          shadow-lg 
+          z-50
+        ">
+
           {message}
+
         </div>
+
       )}
 
+
+
+
       {/* HEADER */}
-      <Header cartCount={cartItems.reduce((sum, item) => sum + item.qty, 0)} />
+      <Header
+        cartCount={
+          cartItems.reduce(
+            (sum, item) => sum + item.qty,
+            0
+          )
+        }
+      />
 
-      {/* ROUTES */}
-      <Routes>
-        <Route path="/" element={<Home />} />
 
-        <Route
-          path="/products"
-          element={<Products addToCart={addToCart} />}
-        />
 
-        <Route
-          path="/cart"
-          element={
-            <Cart
-              cartItems={cartItems}
-              removeFromCart={removeFromCart}
-              increaseQty={increaseQty}
-              decreaseQty={decreaseQty}
-            />
-          }
-        />
 
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/adminproducts" element={<AdminProducts />} />
-        <Route path="/orders" element={<AdminOrders />} />
-        <Route path="/users" element={<AdminUsers />} />
-        <Route path="/garaly" element={<Garaly />} />
-      </Routes>
-    </>
+
+      {/* PAGE CONTENT */}
+      <main className="flex-1">
+
+
+        <Routes>
+
+          <Route
+            path="/"
+            element={<Home />}
+          />
+
+
+          <Route
+            path="/products"
+            element={
+              <Products
+                addToCart={addToCart}
+              />
+            }
+          />
+
+
+          <Route
+            path="/cart"
+            element={
+              <Cart
+
+                cartItems={cartItems}
+
+                removeFromCart={removeFromCart}
+
+                increaseQty={increaseQty}
+
+                decreaseQty={decreaseQty}
+
+              />
+            }
+          />
+
+
+
+          <Route
+           path="/dashboard"
+         element={
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  }
+/>
+
+          <Route
+            path="/adminproducts"
+            element={<AdminProducts />}
+          />
+
+
+          <Route
+            path="/orders"
+            element={<AdminOrders />}
+          />
+
+
+          <Route
+            path="/users"
+            element={<AdminUsers />}
+          />
+
+
+          <Route
+            path="/garaly"
+            element={<Garaly />}
+          />
+           <Route
+           path="/about"
+           element={<AboutUs />}
+           />
+
+        </Routes>
+
+
+      </main>
+
+
+
+
+
+      {/* FOOTER */}
+      <Footer />
+
+
+    </div>
+
   );
 }

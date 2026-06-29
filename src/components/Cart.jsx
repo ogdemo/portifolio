@@ -115,7 +115,7 @@ export default function Cart({
 
             <div className="bg-white p-10 rounded-xl shadow text-center">
 
-              <h2 className="text-xl text-gray-500">
+              <h2 className="text-xl text-gray-500 font-extrabold ">
                 Your cart is empty
               </h2>
 

@@ -14,7 +14,6 @@ export default function AdminOrders() {
         "http://localhost:5000/orders"
       );
 
-
       const data = await res.json();
 
 
@@ -50,9 +49,9 @@ export default function AdminOrders() {
 
 
 
+
   // Delete order
   const deleteOrder = async (id) => {
-
 
     const confirmDelete = window.confirm(
       "Are you sure you want to delete this order?"
@@ -65,14 +64,12 @@ export default function AdminOrders() {
 
     try {
 
-
       const res = await fetch(
         `http://localhost:5000/orders/${id}`,
         {
           method:"DELETE"
         }
       );
-
 
 
       const data = await res.json();
@@ -84,11 +81,10 @@ export default function AdminOrders() {
         alert(data.message);
 
 
-        // remove deleted order immediately
         setOrders((previousOrders)=>
           previousOrders.filter(
             (order)=>
-            order.order_id !== id
+              order.order_id !== id
           )
         );
 
@@ -111,7 +107,6 @@ export default function AdminOrders() {
 
     }
 
-
   };
 
 
@@ -130,7 +125,6 @@ export default function AdminOrders() {
 
 
       <div className="mb-8">
-
 
         <h1 className="
         text-4xl
@@ -155,7 +149,7 @@ export default function AdminOrders() {
 
 
 
-      {/* Cards */}
+      {/* Summary Cards */}
 
       <div className="
       grid
@@ -197,7 +191,6 @@ export default function AdminOrders() {
         p-6
         ">
 
-
           <p className="text-gray-500">
             Pending Payment
           </p>
@@ -220,7 +213,6 @@ export default function AdminOrders() {
 
 
         </div>
-
 
 
 
@@ -252,7 +244,6 @@ export default function AdminOrders() {
             ).length
           }
 
-
           </h2>
 
 
@@ -267,7 +258,7 @@ export default function AdminOrders() {
 
 
 
-      {/* Table */}
+      {/* Orders Table */}
 
       <div className="
       bg-white
@@ -306,7 +297,9 @@ export default function AdminOrders() {
           text-white
           ">
 
+
             <tr>
+
 
               <th className="p-4">
                 ID
@@ -320,6 +313,16 @@ export default function AdminOrders() {
 
               <th className="p-4">
                 Email
+              </th>
+
+
+              <th className="p-4">
+                Phone
+              </th>
+
+
+              <th className="p-4">
+                Location
               </th>
 
 
@@ -384,6 +387,7 @@ export default function AdminOrders() {
 
 
 
+
                 <td className="
                 p-4
                 text-center
@@ -394,12 +398,36 @@ export default function AdminOrders() {
 
 
 
+
                 <td className="
                 p-4
                 text-center
                 ">
                   {o.email}
                 </td>
+
+
+
+
+
+                <td className="
+                p-4
+                text-center
+                ">
+                  {o.phone}
+                </td>
+
+
+
+
+
+                <td className="
+                p-4
+                text-center
+                ">
+                  {o.location}
+                </td>
+
 
 
 
@@ -415,6 +443,7 @@ export default function AdminOrders() {
 
 
 
+
                 <td className="
                 p-4
                 text-center
@@ -425,15 +454,18 @@ export default function AdminOrders() {
 
 
 
+
                 <td className="
                 p-4
                 text-center
                 ">
+
                   {
                     new Date(
                       o.order_date
                     ).toLocaleDateString()
                   }
+
                 </td>
 
 
@@ -445,7 +477,9 @@ export default function AdminOrders() {
                 text-center
                 ">
 
+
                   <span className={`
+
                     px-3
                     py-1
                     rounded-full
@@ -454,11 +488,17 @@ export default function AdminOrders() {
 
                     ${
                       o.payment_status === "Paid"
+
                       ?
+
                       "bg-green-100 text-green-700"
+
                       :
+
                       "bg-yellow-100 text-yellow-700"
+
                     }
+
                   `}>
 
                     {o.payment_status}
@@ -480,7 +520,7 @@ export default function AdminOrders() {
 
                   <button
 
-                    onClick={()=>
+                    onClick={() =>
                       deleteOrder(o.order_id)
                     }
 
@@ -514,6 +554,7 @@ export default function AdminOrders() {
 
 
         </table>
+
 
 
 
