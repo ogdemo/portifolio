@@ -8,7 +8,7 @@ import Dashboard from "./components/Dashboard";
 import AdminProducts from "./components/AdminProducts";
 import AdminOrders from "./components/AdminOrders";
 import AdminUsers from "./components/AdminUsers";
-import Garaly from "./components/Garaly";
+import Gallery from "./components/Gallery";
 import Footer from "./components/Footer";
 import AboutUs from "./components/AboutUs";
 import { Routes, Route } from "react-router-dom";
@@ -263,8 +263,8 @@ export default function App() {
 
 
           <Route
-            path="/garaly"
-            element={<Garaly />}
+            path="/gallery"
+            element={<Gallery />}
           />
            <Route
            path="/about"

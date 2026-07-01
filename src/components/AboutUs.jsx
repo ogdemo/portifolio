@@ -56,7 +56,7 @@ export default function AboutUs() {
 
 
           <p className="mt-4 text-gray-600 leading-7">
-            From selecting quality coffee products to delivering them to
+            From selecting quality meals products to delivering them to
             customers, we focus on quality, trust, and satisfaction.
           </p>
 
@@ -116,11 +116,11 @@ export default function AboutUs() {
           ">
 
             <h3 className="font-bold text-gray-900">
-              Premium Coffee
+              Premium Meals & Drinks
             </h3>
 
             <p className="text-sm text-gray-600">
-              Fresh taste in every cup
+              Fresh taste in every plate
             </p>
 
           </div>
@@ -165,7 +165,7 @@ export default function AboutUs() {
 
 
             <p className="mt-4 text-gray-600 leading-7">
-              To provide customers with excellent coffee products,
+              To provide customers with excellent meals products,
               reliable service, and a shopping experience they can trust.
             </p>
 
@@ -191,7 +191,7 @@ export default function AboutUs() {
 
 
             <p className="mt-4 text-gray-600 leading-7">
-              To become a trusted coffee brand known for quality,
+              To become a trusted meals brand known for quality,
               innovation, and customer satisfaction.
             </p>
 
@@ -404,7 +404,7 @@ export default function AboutUs() {
 
 
         <h2 className="text-3xl font-bold text-gray-900">
-          Ready to Enjoy Our Coffee?
+          Ready to Enjoy Our Meals?
         </h2>
 
 
@@ -420,6 +420,7 @@ export default function AboutUs() {
           px-8
           py-3
           rounded-lg
+          font-bold
           hover:bg-gray-700
           transition
         ">
