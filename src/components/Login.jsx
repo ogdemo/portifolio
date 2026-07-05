@@ -160,7 +160,7 @@ export default function Login({ closeForm }) {
           closeForm();
 
 
-        },1500);
+        },1000);
 
 
 
