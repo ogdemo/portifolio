@@ -7,59 +7,71 @@ export default function Cart({ cartItems, removeFromCart, increaseQty, decreaseQ
 
   const total = cartItems.reduce((sum, item) => sum + Number(item.price) * item.qty, 0);
 
-  const checkout = async () => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (!user) return alert("Login required");
-    if (!paymentMethod) return alert("Please select payment method");
-    if ((paymentMethod === "MTN Mobile Money" || paymentMethod === "Airtel Money") && !phoneNumber)
-      return alert("Please enter phone number");
+const checkout = async () => {
+  const user = JSON.parse(localStorage.getItem("user"));
+  if (!user) return alert("Login required");
 
-    let endpoint = "http://localhost:5000/checkout";
-    let body = {
-      user_id: user.id,
-      payment_method: paymentMethod,
-      cartItems: cartItems.map(i => ({ product_id: i.product_id, qty: i.qty }))
-    };
+  if (cartItems.length === 0) return alert("Cart is empty");
 
-    if (paymentMethod === "MTN Mobile Money") {
-  endpoint = "http://localhost:5000/api/momo/pay";
-  body = {
+  const endpoint = "http://localhost:5000/checkout";
+
+  const body = {
     user_id: user.id,
-    amount: total,
-    phone: phoneNumber,
     cartItems: cartItems.map(i => ({
       product_id: i.product_id,
-      qty: i.qty
+      qty: i.qty,
+      price: i.price
     }))
   };
-}
 
-    if (paymentMethod === "Airtel Money") {
-      endpoint = "http://localhost:5000/airtel/request-payment";
-      body = { ...body, amount: total, phone: phoneNumber };
+  try {
+    setLoading(true);
+
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.message || "Checkout failed");
     }
 
-    try {
-      setLoading(true);
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      alert(data.message || "Request processed");
-      if (res.ok) {
-        setPaymentMethod("");
-        setPhoneNumber("");
-        window.location.reload();
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Checkout failed");
-    } finally {
-      setLoading(false);
+    // 🔥 IMPORTANT: backend returns payment link
+    if (data.paymentLink) {
+      alert("Redirecting to payment...");
+
+      // safest production behavior
+      window.location.href = data.paymentLink;
+      return;
     }
-  };
+
+    alert("Order created but no payment link returned");
+
+  } catch (err) {
+    console.error(err);
+    alert(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const pollPaymentStatus = (orderId) => {
+  const interval = setInterval(async () => {
+    const res = await fetch(`http://localhost:5000/orders/${orderId}/status`);
+    const data = await res.json();
+
+    if (data.payment_status === "PAID") {
+      clearInterval(interval);
+
+      alert("Payment successful!");
+
+      window.location.href = "/success";
+    }
+  }, 3000);
+};
 
   return (
     <div className="min-h-screen bg-gray-100 pt-24 px-4">

@@ -4,6 +4,37 @@ const bcrypt = require("bcrypt");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const axios = require("axios");
+
+ const { v4: uuidv4 } = require("uuid");
+
+ const MTN = {
+  baseURL: "https://api.mtn.com/v1",
+  clientId: "YOUR_CONSUMER_KEY",
+  clientSecret: "YOUR_CONSUMER_SECRET",
+};
+
+// Function to get access token from MTN API
+async function getAccessToken() {
+  try {
+    const response = await axios.post(
+      "https://api.mtn.com/v1/oauth/access_token",
+      null,
+      {
+        params: {
+          grant_type: "client_credentials",
+          client_id: MTN.clientId,
+          client_secret: MTN.clientSecret,
+        },
+      }
+    );
+
+    return response.data.access_token;
+  } catch (err) {
+    console.log("TOKEN ERROR:", err.response?.data || err.message);
+    throw err;
+  }
+}
 
 const app = express();
 app.use(cors());
@@ -201,40 +232,112 @@ app.put("/products/:id", (req, res) => {
   });
 });
 
+
+
+
+
 // CHECKOUT
-app.post("/checkout", (req, res) => {
+app.post("/checkout", async (req, res) => {
   const { user_id, cartItems } = req.body;
 
-  if (!user_id) return res.status(400).json({ message: "User ID is required" });
-  if (!cartItems || cartItems.length === 0) {
-    return res.status(400).json({ message: "Cart is empty" });
+  if (!user_id || !cartItems?.length) {
+    return res.status(400).json({ message: "Invalid request" });
   }
 
-  const orderSql =
-    "INSERT INTO orders (user_id, order_date, payment_status) VALUES (?, NOW(), 'Pending')";
-  db.query(orderSql, [user_id], (err, orderResult) => {
-    if (err) return res.status(500).json(err);
+  const momo_reference = uuidv4();
 
-    const orderId = orderResult.insertId;
-    const values = cartItems.map((item) => [orderId, item.product_id, item.qty]);
-    const itemSql =
-      "INSERT INTO order_items (order_id, product_id, quantity) VALUES ?";
-    db.query(itemSql, [values], (err) => {
-      if (err) return res.status(500).json(err);
-      res.json({ message: "Order created successfully", orderId });
-    });
+  const totalAmount = cartItems.reduce(
+    (sum, item) => sum + Number(item.price) * item.qty,
+    0
+  );
+
+  const insertOrderSql = `
+    INSERT INTO orders (user_id, order_date, payment_status, momo_reference)
+    VALUES (?, NOW(), 'PENDING', ?)
+  `;
+
+  db.query(insertOrderSql, [user_id, momo_reference], async (err, result) => {
+    if (err) {
+      console.log("DB ERROR:", err);
+      return res.status(500).json({ message: "Database error" });
+    }
+
+    const orderId = result.insertId;
+
+    const items = cartItems.map(item => [
+      orderId,
+      item.product_id,
+      item.qty
+    ]);
+
+    db.query(
+      "INSERT INTO order_items (order_id, product_id, quantity) VALUES ?",
+      [items],
+      async (err2) => {
+        if (err2) {
+          console.log("ITEM ERROR:", err2);
+          return res.status(500).json({ message: "Item insert failed" });
+        }
+
+        try {
+          const token = await getAccessToken();
+
+          const paymentPayload = {
+            description: "Order Payment",
+            channel: "WEB",
+            redirectURL: "http://localhost:3000/success",
+            externalId: momo_reference,
+            payer: {
+              payerRef: user_id.toString()
+            },
+            payee: [
+              {
+                payeeName: "MrChicken Shop",
+                amount: {
+                  amount: totalAmount.toString(),
+                  units: "RWF"
+                }
+              }
+            ]
+          };
+
+          const response = await axios.post(
+            `${MTN.baseURL}/payment-link`,
+            paymentPayload,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                transactionId: momo_reference,
+                countryCode: "RW"
+              }
+            }
+          );
+
+          return res.json({
+            message: "Payment initiated",
+            orderId,
+            momo_reference,
+            paymentLink: response.data
+          });
+
+        } catch (error) {
+          console.log("MTN ERROR:", error.response?.data || error.message);
+
+          return res.status(500).json({
+            message: "Payment initiation failed"
+          });
+        }
+      }
+    );
   });
 });
 
 // MOMO CALLBACK
 app.post("/api/momo/callback", (req, res) => {
   try {
-    console.log("🔥 CALLBACK RECEIVED");
-    console.log(req.body);
-
     const data = req.body || {};
 
-    // Normalize reference id (MoMo variants)
     const referenceId =
       data.referenceId ||
       data.externalId ||
@@ -244,44 +347,64 @@ app.post("/api/momo/callback", (req, res) => {
     const status = (data.status || "").toUpperCase();
 
     if (!referenceId) {
-      return res.status(400).send("No referenceId");
+      return res.status(400).send("Missing reference");
     }
 
-    // Normalize status
-    let paymentStatus = "FAILED";
-    if (status === "SUCCESSFUL" || status === "SUCCESS") {
-      paymentStatus = "PAID";
-    } else if (status === "PENDING") {
-      paymentStatus = "PENDING";
-    }
+    const findSql = "SELECT * FROM orders WHERE momo_reference = ?";
 
-    const updateSql = `
-      UPDATE orders 
-      SET payment_status = ?
-      WHERE momo_reference = ?
-    `;
+    db.query(findSql, [referenceId], (err, rows) => {
+      if (err) return res.status(500).send("DB error");
 
-    db.query(updateSql, [paymentStatus, referenceId], (err, result) => {
-      if (err) {
-        console.log("DB ERROR:", err);
-        return res.status(500).json({ error: "Database error" });
+      if (!rows.length) {
+        return res.status(404).send("Order not found");
       }
 
-      if (result.affectedRows === 0) {
-        return res.status(404).json({ message: "Order not found" });
+      let paymentStatus = "FAILED";
+
+      if (status === "SUCCESSFUL" || status === "SUCCESS") {
+        paymentStatus = "PAID";
+      } else if (status === "PENDING") {
+        paymentStatus = "PENDING";
       }
 
-      console.log("✅ Payment updated:", referenceId, paymentStatus);
+      const updateSql = `
+        UPDATE orders 
+        SET payment_status = ?
+        WHERE momo_reference = ?
+      `;
 
-      return res.json({
-        message: "Payment status updated",
-        referenceId,
-        paymentStatus,
+      db.query(updateSql, [paymentStatus, referenceId], (err2) => {
+        if (err2) {
+          console.log("UPDATE ERROR:", err2);
+          return res.status(500).send("Update failed");
+        }
+
+        console.log("✔ Payment updated:", referenceId, paymentStatus);
+
+        return res.json({ ok: true });
       });
     });
 
-  } catch (error) {
-    console.log("CALLBACK ERROR:", error);
-    return res.status(500).json({ error: "Internal server error" });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).send("Server error");
   }
+});
+// Get payment methods
+
+app.get("/orders/:order_id/status", (req, res) => {
+  const orderId = req.params.order_id;
+
+  const sql = `
+    SELECT order_id, payment_status 
+    FROM orders 
+    WHERE order_id = ?
+  `;
+
+  db.query(sql, [orderId], (err, result) => {
+    if (err) return res.status(500).json(err);
+    if (!result.length) return res.status(404).json({ message: "Not found" });
+
+    res.json(result[0]);
+  });
 });
