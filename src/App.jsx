@@ -11,6 +11,7 @@ import AdminUsers from "./components/AdminUsers";
 import Gallery from "./components/Gallery";
 import Footer from "./components/Footer";
 import AboutUs from "./components/AboutUs";
+import Success from "./components/Success";
 import { Routes, Route } from "react-router-dom";
 
 export default function App() {
@@ -150,6 +151,14 @@ export default function App() {
 
 
 
+  // CLEAR CART
+  const clearCart = () => {
+    setCartItems([]);
+    localStorage.removeItem("cart");
+  };
+
+
+
   return (
 
     <div className="min-h-screen flex flex-col">
@@ -220,15 +229,11 @@ export default function App() {
             path="/cart"
             element={
               <Cart
-
                 cartItems={cartItems}
-
                 removeFromCart={removeFromCart}
-
                 increaseQty={increaseQty}
-
                 decreaseQty={decreaseQty}
-
+                clearCart={clearCart}
               />
             }
           />
@@ -266,19 +271,19 @@ export default function App() {
             path="/gallery"
             element={<Gallery />}
           />
-           <Route
-           path="/about"
-           element={<AboutUs />}
-           />
+          <Route
+            path="/about"
+            element={<AboutUs />}
+          />
+
+          <Route
+            path="/success"
+            element={<Success />}
+          />
 
         </Routes>
 
-
       </main>
-
-
-
-
 
       {/* FOOTER */}
       <Footer />

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import Toast from "./Toast";
 
 export default function AdminOrders() {
 
   const [orders, setOrders] = useState([]);
+  const [toast, setToast] = useState(null);
 
 
   // Load orders
@@ -77,9 +79,7 @@ export default function AdminOrders() {
 
 
       if(res.ok){
-
-        alert(data.message);
-
+        setToast({ message: data.message, type: "info" });
 
         setOrders((previousOrders)=>
           previousOrders.filter(
@@ -88,10 +88,9 @@ export default function AdminOrders() {
           )
         );
 
-
       }else{
 
-        alert(data.message);
+        setToast({ message: data.message, type: "error" });
 
       }
 
@@ -101,9 +100,7 @@ export default function AdminOrders() {
 
       console.log(error);
 
-      alert(
-        "Delete failed"
-      );
+      setToast({ message: "Delete failed", type: "error" });
 
     }
 
@@ -122,6 +119,8 @@ export default function AdminOrders() {
     md:p-10
     mt-16
     ">
+
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
 
       <div className="mb-8">
@@ -204,8 +203,8 @@ export default function AdminOrders() {
 
           {
             orders.filter(
-              order =>
-              order.payment_status === "Pending"
+              (order) =>
+                order.payment_status?.toUpperCase() === "PENDING"
             ).length
           }
 
@@ -239,8 +238,8 @@ export default function AdminOrders() {
 
           {
             orders.filter(
-              order =>
-              order.payment_status === "Paid"
+              (order) =>
+                order.payment_status?.toUpperCase() === "PAID"
             ).length
           }
 
@@ -478,31 +477,23 @@ export default function AdminOrders() {
                 ">
 
 
-                  <span className={`
-
+                  <span
+                    className={`
                     px-3
                     py-1
                     rounded-full
                     text-sm
                     font-semibold
-
                     ${
-                      o.payment_status === "Paid"
-
-                      ?
-
-                      "bg-green-100 text-green-700"
-
-                      :
-
-                      "bg-yellow-100 text-yellow-700"
-
+                      o.payment_status?.toUpperCase() === "PAID"
+                        ? "bg-green-100 text-green-700"
+                        : o.payment_status?.toUpperCase() === "FAILED"
+                        ? "bg-red-100 text-red-700"
+                        : "bg-yellow-100 text-yellow-700"
                     }
-
-                  `}>
-
+                  `}
+                  >
                     {o.payment_status}
-
                   </span>
 
 
