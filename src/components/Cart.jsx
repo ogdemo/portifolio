@@ -97,7 +97,17 @@ export default function Cart({
 
   const pollPaymentStatus = (orderId) => {
     let attempts = 0;
-    const maxAttempts = 40;
+    const maxAttempts = 5;
+    const timeoutMs = Number(import.meta?.env?.VITE_MTN_PAYMENT_TIMEOUT_MS || 15000);
+
+    const timeoutId = setTimeout(() => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      setPendingOrder(null);
+      setToast({
+        message: "No response from your phone in 15 seconds. Please check your MTN balance or try again.",
+        type: "warning",
+      });
+    }, timeoutMs);
 
     pollRef.current = setInterval(async () => {
       attempts++;
@@ -107,19 +117,22 @@ export default function Cart({
         const data = await res.json();
 
         if (data.payment_status === "PAID") {
-              setToast({ message: "MTN MoMo payment successful!", type: "info" });
-              finishOrder();
+          clearTimeout(timeoutId);
+          setToast({ message: "MTN MoMo payment successful!", type: "info" });
+          finishOrder();
           return;
         }
 
         if (data.payment_status === "FAILED") {
-              clearInterval(pollRef.current);
-              setPendingOrder(null);
-              setToast({ message: "Payment failed. Please try again.", type: "error" });
+          clearTimeout(timeoutId);
+          clearInterval(pollRef.current);
+          setPendingOrder(null);
+          setToast({ message: "Payment failed. Please try again.", type: "error" });
           return;
         }
 
         if (attempts >= maxAttempts) {
+          clearTimeout(timeoutId);
           clearInterval(pollRef.current);
           setPendingOrder(null);
           setToast({ message: "Payment is still pending. Check your phone or contact mrchicken support.", type: "warning" });
@@ -183,27 +196,14 @@ export default function Cart({
       }
 
       if (data.status === "PENDING") {
-        const simulated = !!data.simulated;
         setPendingOrder({
           orderId: data.orderId,
           reference: data.reference,
           amount: data.amount,
           phone: data.phone,
-          simulated,
         });
 
-        if (simulated) {
-          setToast({ message: "Simulated MTN payment started. The order will complete automatically.", type: "info" });
-          const simulatedOrderId = data.orderId;
-          setTimeout(() => {
-            if (simulatedOrderId === data.orderId) {
-              finishOrder();
-            }
-          }, 8000);
-          return;
-        }
-
-        setToast({ message: "MTN MoMo request sent to your phone. Enter your PIN to approve the payment.", type: "info" });
+        setToast({ message: "MTN MoMo request sent to your phone. We will update the order once MTN confirms the payment.", type: "info" });
         pollPaymentStatus(data.orderId);
       }
     } catch (err) {
@@ -215,29 +215,40 @@ export default function Cart({
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 pt-24 px-4">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Shopping Cart</h1>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#f8fafc,#f1f5f9_60%,#e2e8f0)] pt-24 px-4 pb-16">
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-8 flex flex-col md:flex-row md:items-end md:justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Checkout</p>
+            <h1 className="text-3xl font-bold text-slate-800">Your Shopping Cart</h1>
+            <p className="text-slate-500 mt-1">Review your order, choose a payment method, and complete your delivery securely.</p>
+          </div>
+          <div className="bg-white/80 border border-slate-200 rounded-2xl px-4 py-3 shadow-sm">
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Order total</p>
+            <p className="text-2xl font-bold text-emerald-700">FRW {total.toLocaleString()}</p>
+          </div>
+        </div>
 
         {pendingOrder && (
-          <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-5 mb-6">
-            <h3 className="font-bold text-yellow-800 text-lg mb-2">
-              Waiting for MTN MoMo approval
-            </h3>
-            <p className="text-yellow-700 text-sm mb-1">
-              Check your phone ({pendingOrder.phone}) and approve the payment
-              prompt from <strong>mrchicken</strong>.
-            </p>
-            <p className="text-yellow-600 text-xs">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 mb-6 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-amber-800 text-lg">
+                  Waiting for MTN MoMo approval
+                </h3>
+                <p className="text-amber-700 text-sm mt-1">
+                  Check your phone ({pendingOrder.phone}) and approve the prompt from <strong>mrchicken</strong>.
+                </p>
+              </div>
+              <div className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-800">
+                Pending confirmation
+              </div>
+            </div>
+            <p className="text-amber-600 text-xs mt-3">
               Order #{pendingOrder.orderId} · FRW{" "}
               {Number(pendingOrder.amount).toLocaleString()} · Ref:{" "}
               {pendingOrder.reference.slice(0, 8)}...
             </p>
-            {pendingOrder.simulated && (
-              <div className="mt-2 inline-block bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                Simulated sandbox payment
-              </div>
-            )}
           </div>
         )}
 
@@ -247,56 +258,58 @@ export default function Cart({
           </div>
         ) : (
           <>
-            {cartItems.map((item) => (
-              <div
-                key={item.product_id}
-                className="bg-white rounded-xl shadow p-4 mb-4 flex flex-col md:flex-row items-center gap-5"
-              >
-                <img
-                  src={item.image}
-                  alt={item.name}
-                  className="w-28 h-28 object-cover rounded-lg"
-                />
-                <div className="flex-1">
-                  <h2 className="text-xl font-bold">{item.name}</h2>
-                  <p className="text-green-600 font-bold">
-                    FRW {Number(item.price).toLocaleString()}
-                  </p>
-                  <p>
-                    Subtotal: FRW{" "}
-                    {(item.price * item.qty).toLocaleString()}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => decreaseQty(item.product_id)}
-                    className="bg-gray-200 px-3 py-1 rounded"
-                  >
-                    -
-                  </button>
-                  <span>{item.qty}</span>
-                  <button
-                    onClick={() => increaseQty(item.product_id)}
-                    className="bg-gray-200 px-3 py-1 rounded"
-                  >
-                    +
-                  </button>
-                </div>
-
-                <button
-                  onClick={() => removeFromCart(item.product_id)}
-                  className="bg-red-500 text-white px-4 py-2 rounded-lg"
+            <div className="grid gap-4 mb-6">
+              {cartItems.map((item) => (
+                <div
+                  key={item.product_id}
+                  className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col md:flex-row items-center gap-5"
                 >
-                  Remove
-                </button>
-              </div>
-            ))}
+                  <img
+                    src={item.image}
+                    alt={item.name}
+                    className="w-28 h-28 object-cover rounded-xl"
+                  />
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-slate-800">{item.name}</h2>
+                    <p className="text-emerald-600 font-bold mt-1">
+                      FRW {Number(item.price).toLocaleString()}
+                    </p>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Subtotal: FRW{" "}
+                      {(item.price * item.qty).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => decreaseQty(item.product_id)}
+                      className="bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg text-lg"
+                    >
+                      -
+                    </button>
+                    <span className="min-w-6 text-center font-semibold">{item.qty}</span>
+                    <button
+                      onClick={() => increaseQty(item.product_id)}
+                      className="bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded-lg text-lg"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => removeFromCart(item.product_id)}
+                    className="bg-rose-500 hover:bg-rose-600 text-white px-4 py-2 rounded-lg"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
 
             <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
-            <div className="bg-white rounded-xl shadow p-6">
-              <h2 className="text-xl font-bold mb-4">Payment Method</h2>
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+              <h2 className="text-xl font-bold mb-4 text-slate-800">Payment Method</h2>
 
               <select
                 value={paymentMethod}
@@ -305,7 +318,7 @@ export default function Cart({
                   setPhoneNumber("");
                   setConfirmPhoneNumber("");
                 }}
-                className="w-full border p-3 rounded-lg mb-4"
+                className="w-full border border-slate-300 bg-slate-50 p-3 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 disabled={!!pendingOrder}
               >
                 <option value="">Select Payment</option>
@@ -324,7 +337,7 @@ export default function Cart({
                       onChange={(e) =>
                         setPhoneNumber(formatPhoneInput(e.target.value))
                       }
-                      className="w-full border p-3 rounded-lg"
+                      className="w-full border border-slate-300 bg-slate-50 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       disabled={!!pendingOrder}
                     />
                     <p className="text-sm text-gray-500 mt-2">
@@ -342,7 +355,7 @@ export default function Cart({
                       onChange={(e) =>
                         setConfirmPhoneNumber(formatPhoneInput(e.target.value))
                       }
-                      className="w-full border p-3 rounded-lg"
+                      className="w-full border border-slate-300 bg-slate-50 p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
                       disabled={!!pendingOrder}
                     />
                     <p className="text-sm text-gray-500 mt-2">
@@ -352,9 +365,9 @@ export default function Cart({
                 </>
               )}
 
-              <div className="flex justify-between mb-5">
-                <h2 className="text-2xl font-bold">Total</h2>
-                <span className="text-2xl font-bold text-green-600">
+              <div className="flex justify-between mb-5 border-t border-slate-200 pt-4">
+                <h2 className="text-2xl font-bold text-slate-800">Total</h2>
+                <span className="text-2xl font-bold text-emerald-700">
                   FRW {total.toLocaleString()}
                 </span>
               </div>
@@ -362,7 +375,7 @@ export default function Cart({
               <button
                 disabled={loading || !!pendingOrder}
                 onClick={checkout}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white py-3 rounded-lg"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white py-3 rounded-xl font-semibold shadow-sm"
               >
                 {loading
                   ? "Sending MTN MoMo request..."

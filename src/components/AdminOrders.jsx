@@ -4,7 +4,19 @@ import Toast from "./Toast";
 export default function AdminOrders() {
 
   const [orders, setOrders] = useState([]);
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [toast, setToast] = useState(null);
+  const SITE_LOCATION = "Kigali, Rwanda";
+
+  const buildRouteMapUrl = (origin, destination) => {
+    const from = origin || SITE_LOCATION;
+    const to = destination || "Location not provided";
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+    if (!apiKey) {
+      return `https://www.google.com/maps?q=${encodeURIComponent(`${from} to ${to}`)}&z=14&output=embed`;
+    }
+    return `https://www.google.com/maps/embed/v1/directions?key=${encodeURIComponent(apiKey)}&origin=${encodeURIComponent(from)}&destination=${encodeURIComponent(to)}&mode=driving`;
+  };
 
 
   // Load orders
@@ -47,6 +59,18 @@ export default function AdminOrders() {
     loadOrders();
 
   }, []);
+
+  useEffect(() => {
+    if (orders.length > 0) {
+      if (!selectedOrderId || !orders.some((order) => order.order_id === selectedOrderId)) {
+        setSelectedOrderId(orders[0].order_id);
+      }
+    } else {
+      setSelectedOrderId(null);
+    }
+  }, [orders, selectedOrderId]);
+
+  const selectedOrder = orders.find((order) => order.order_id === selectedOrderId) || null;
 
 
 
@@ -144,9 +168,53 @@ export default function AdminOrders() {
 
       </div>
 
+      <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800">Delivery Tracking Map</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              View the store location and the customer delivery location for the selected order.
+            </p>
+          </div>
 
+          <select
+            value={selectedOrderId ?? ""}
+            onChange={(event) => setSelectedOrderId(Number(event.target.value))}
+            className="border border-gray-300 rounded-lg px-3 py-2 text-sm"
+          >
+            {orders.map((order) => (
+              <option key={order.order_id} value={order.order_id}>
+                Order #{order.order_id} - {order.fullname}
+              </option>
+            ))}
+          </select>
+        </div>
 
+        <div className="grid lg:grid-cols-2 gap-4">
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-gray-800 text-white px-4 py-2 text-sm font-semibold">
+              Store location
+            </div>
+            <iframe
+              title="Store location"
+              src={buildRouteMapUrl(SITE_LOCATION, selectedOrder?.location || "Location not provided")}
+              className="w-full h-72 border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+          </div>
 
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <div className="bg-green-700 text-white px-4 py-2 text-sm font-semibold">
+              Delivery route
+            </div>
+            <div className="p-4 bg-gray-50 text-sm text-gray-600">
+              <p><strong>From:</strong> {SITE_LOCATION}</p>
+              <p><strong>To:</strong> {selectedOrder?.location || "Location not provided"}</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Summary Cards */}
 

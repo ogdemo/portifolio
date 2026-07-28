@@ -34,32 +34,17 @@ const MTN = {
   useSubscriptionKey:
     process.env.MTN_USE_SUBSCRIPTION_KEY !== undefined
       ? String(process.env.MTN_USE_SUBSCRIPTION_KEY).toLowerCase() === "true"
-      : undefined,
+      : false,
   subscriptionKey:
     process.env.MTN_SUBSCRIPTION_KEY || "YOUR_SUBSCRIPTION_KEY_HERE",
   collectionPath: "collection/v1_0",
   requestPath: "requesttopay",
   paymentsPath: "v1/payments",
   get shouldUseTokenSubscriptionKey() {
-    if (typeof this.useSubscriptionKey === "boolean") {
-      return this.useSubscriptionKey;
-    }
-
-    // Default behavior: when running in sandbox and using Payments API,
-    // the token endpoint typically does not require Ocp-Apim-Subscription-Key.
-    // For other environments/modes, require the subscription key by default.
-    if (this.environment === "sandbox" && this.apiMode === "payments") {
-      return false;
-    }
-
-    return true;
+    return this.useSubscriptionKey;
   },
   get shouldUseSubscriptionKey() {
-    if (typeof this.useSubscriptionKey === "boolean") {
-      return this.useSubscriptionKey;
-    }
-
-    return this.apiMode !== "payments";
+    return this.useSubscriptionKey;
   },
   get apiBase() {
     return this.environment === "sandbox"
@@ -175,20 +160,15 @@ async function getAccessToken() {
   if (MTN.shouldUseTokenSubscriptionKey) {
     if (subscriptionKey) {
       headers["Ocp-Apim-Subscription-Key"] = subscriptionKey;
-    } else if (typeof MTN.useSubscriptionKey === "boolean" && MTN.useSubscriptionKey === false) {
-      console.warn(
-        "MTN_USE_SUBSCRIPTION_KEY=false. Sending token request without subscription key because the config explicitly disabled it."
-      );
+      console.log("Sending MTN token request with Ocp-Apim-Subscription-Key.");
     } else {
-      const message =
-        "MTN token request requires Ocp-Apim-Subscription-Key, but MTN_SUBSCRIPTION_KEY is missing. " +
-        "Set MTN_SUBSCRIPTION_KEY in backend/.env or in your database. For sandbox, this is usually required.";
-      console.error(message);
-      throw new MtnConfigError(message);
+      console.warn(
+        "MTN_USE_SUBSCRIPTION_KEY=true, but no subscription key was found. Continuing without the header because this MTN product may not require it."
+      );
     }
   } else {
     console.log(
-      "MTN_USE_SUBSCRIPTION_KEY is explicitly false. Skipping Ocp-Apim-Subscription-Key on token request."
+      "Skipping Ocp-Apim-Subscription-Key on MTN token request because the configuration does not require it."
     );
   }
 
@@ -242,20 +222,12 @@ async function getAccessToken() {
       }
     }
 
-    // If we detected a missing subscription key and couldn't find one, throw a friendly config error
+    // If MTN reports a subscription-key issue we log it clearly but do not fail the flow
+    // until we have verified the merchant account and endpoint configuration.
     if (status === 401 && /subscription key/i.test(String(bodyMessage))) {
-      // If running in sandbox and simulation is allowed, return a fake token so devs
-      // can continue without a subscription key. Enable/disable with MTN_ALLOW_SANDBOX_SIMULATION.
-      const allowSim = String(process.env.MTN_ALLOW_SANDBOX_SIMULATION ?? "true").toLowerCase() !== "false";
-      if (MTN.environment === "sandbox" && allowSim) {
-        console.warn("No MTN subscription key found — returning simulated sandbox token because MTN_ALLOW_SANDBOX_SIMULATION is enabled.");
-        return "sandbox-sim-token";
-      }
-
       const message =
-        "MTN token request failed with 401: subscription key required but none found. " +
-        "Please set MTN_SUBSCRIPTION_KEY in backend/.env or add it to your database (settings/config).";
-      console.error(message);
+        "MTN rejected the token request. Verify the merchant account, callback URL, and the endpoint/payload that match your enrolled MTN product.";
+      console.error(message, "Details:", bodyMessage);
       throw new MtnConfigError(message + " Details: " + String(bodyMessage));
     }
 
@@ -336,6 +308,9 @@ async function initiateMtnPayment({ reference, amount, phoneNumber }) {
   const subscriptionKey = await loadMtnSubscriptionKey();
   if (MTN.shouldUseSubscriptionKey && subscriptionKey) {
     headers["Ocp-Apim-Subscription-Key"] = subscriptionKey;
+    console.log("Sending MTN payment request with Ocp-Apim-Subscription-Key.");
+  } else {
+    console.log("Skipping Ocp-Apim-Subscription-Key on MTN payment request because the configuration does not require it.");
   }
 
   if (!isPaymentsMode) {
@@ -355,40 +330,40 @@ async function initiateMtnPayment({ reference, amount, phoneNumber }) {
   console.log("MSISDN:", msisdn);
   console.log("REFERENCE:", reference);
 
-  // If token is a simulated sandbox token, return a fake MTN response (dev only)
-  if (token === "sandbox-sim-token") {
-    const simulated = {
-      status: 202,
-      data: {
-        requestId: `sim-${uuidv4()}`,
-        message: "Simulated MTN payment (sandbox)",
-        status: "PENDING",
-      },
-    };
-
-    console.log("Simulated MTN payment response:", simulated);
-    return { paymentResponse: simulated, paymentPayload, msisdn, simulated: true };
-  }
-
   const paymentResponse = await axios.post(mtmUrl, paymentPayload, {
     headers,
   });
 
-  return { paymentResponse, paymentPayload, msisdn, simulated: false };
+  return { paymentResponse, paymentPayload, msisdn };
 }
 
 function mapMtnStatus(status) {
   const value = String(status || "").toUpperCase();
 
-  if (["SUCCESSFUL", "SUCCESS", "COMPLETED", "PAID"].includes(value)) {
+  if (["SUCCESSFUL", "SUCCESS", "COMPLETED", "PAID", "APPROVED", "SUCCEEDED"].includes(value)) {
     return "PAID";
   }
 
-  if (["PENDING", "PROCESSING", "IN_PROGRESS"].includes(value)) {
+  if (["PENDING", "PROCESSING", "IN_PROGRESS", "INITIATED", "CREATED"].includes(value)) {
     return "PENDING";
   }
 
   return "FAILED";
+}
+
+function getCallbackReference(data) {
+  return (
+    data.externalTransactionId ||
+    data.externalId ||
+    data.referenceId ||
+    data.reference ||
+    data.transactionId ||
+    data.transactionReference ||
+    data.correlatorId ||
+    data.orderId ||
+    data.id ||
+    null
+  );
 }
 
 function handleMomoCallback(req, res) {
@@ -397,16 +372,15 @@ function handleMomoCallback(req, res) {
 
     console.log("MTN CALLBACK:", JSON.stringify(data, null, 2));
 
-    const referenceId =
-      data.externalTransactionId ||
-      data.referenceId ||
-      data.transactionId ||
-      data.correlatorId;
-
-    const status = data.status || data.paymentStatus || data.transactionStatus;
+    const referenceId = getCallbackReference(data);
+    const status = data.status || data.paymentStatus || data.transactionStatus || data.state;
 
     if (!referenceId) {
       return res.status(400).json({ message: "Missing reference" });
+    }
+
+    if (!status) {
+      return res.status(400).json({ message: "Missing payment status" });
     }
 
     const paymentStatus = mapMtnStatus(status);
@@ -705,7 +679,7 @@ app.post("/checkout", async (req, res) => {
           }
 
           try {
-            const { paymentResponse, msisdn, simulated } = await initiateMtnPayment({
+            const { paymentResponse, msisdn } = await initiateMtnPayment({
               reference: momo_reference,
               amount: totalAmount,
               phoneNumber,
@@ -714,25 +688,8 @@ app.post("/checkout", async (req, res) => {
             console.log("MTN STATUS:", paymentResponse.status);
             console.log("MTN RESPONSE:", paymentResponse.data);
 
-            // If this is a simulated sandbox payment, schedule the order to be
-            // marked PAID shortly so the frontend poll sees the change.
-            if (simulated) {
-              const simulateDelayMs = Number(process.env.MTN_SIMULATE_PAID_DELAY_MS || 8000);
-              console.log(`Scheduling simulated order ${orderId} to be marked PAID in ${simulateDelayMs}ms`);
-              setTimeout(() => {
-                db.query(
-                  "UPDATE orders SET payment_status = 'PAID' WHERE order_id = ?",
-                  [orderId],
-                  (err) => {
-                    if (err) console.log("Simulated PAID update error:", err);
-                    else console.log(`Order ${orderId} marked PAID (simulated)`);
-                  }
-                );
-              }, simulateDelayMs);
-            }
-
             return res.json({
-              message: "MTN MoMo payment initiated. Approve the prompt on your phone.",
+              message: "MTN MoMo payment request sent. We will update the order once MTN confirms the payment.",
               orderId,
               reference: momo_reference,
               amount: totalAmount,
@@ -740,7 +697,6 @@ app.post("/checkout", async (req, res) => {
               status: "PENDING",
               shop: MTN.shopName,
               mtn: paymentResponse.data,
-              simulated: !!simulated,
             });
           } catch (paymentError) {
             const errMsg = paymentError.response?.data || paymentError.message;
@@ -780,6 +736,16 @@ app.post("/checkout", async (req, res) => {
 });
 
 // MOMO CALLBACK — MTN sends POST and PUT
+app.get("/api/momo/config", (req, res) => {
+  res.json({
+    environment: MTN.environment,
+    apiMode: MTN.apiMode,
+    callbackUrl: MTN.callbackURL,
+    shopName: MTN.shopName,
+    countryCode: MTN.countryCode,
+  });
+});
+
 app.post("/api/momo/callback", handleMomoCallback);
 app.put("/api/momo/callback", handleMomoCallback);
 
@@ -855,11 +821,23 @@ app.get("/orders/:order_id/status", async (req, res) => {
   });
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
-  console.log(`MTN API mode: ${MTN.apiMode}`);
-  console.log(`MTN environment: ${MTN.environment}`);
-  console.log(`MTN useSubscriptionKey: ${MTN.useSubscriptionKey ?? "undefined"}`);
-  console.log(`MTN shouldUseTokenSubscriptionKey: ${MTN.shouldUseTokenSubscriptionKey}`);
-  console.log(`MTN shouldUseSubscriptionKey: ${MTN.shouldUseSubscriptionKey}`);
-});
+if (require.main === module) {
+  app.listen(5000, () => {
+    console.log("Server running on port 5000");
+    console.log(`MTN API mode: ${MTN.apiMode}`);
+    console.log(`MTN environment: ${MTN.environment}`);
+    console.log(`MTN useSubscriptionKey: ${MTN.useSubscriptionKey ?? "undefined"}`);
+    console.log(`MTN shouldUseTokenSubscriptionKey: ${MTN.shouldUseTokenSubscriptionKey}`);
+    console.log(`MTN shouldUseSubscriptionKey: ${MTN.shouldUseSubscriptionKey}`);
+  });
+}
+
+module.exports = {
+  app,
+  db,
+  MTN,
+  formatRwandaPhone,
+  mapMtnStatus,
+  getCallbackReference,
+  handleMomoCallback,
+};
