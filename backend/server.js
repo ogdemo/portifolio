@@ -412,16 +412,40 @@ app.use(express.json());
 app.use("/uploads", express.static("uploads"));
 
 // DATABASE
-const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT || 4000,
-  ssl: {
-    rejectUnauthorized: true
-  }
+const db = mysql.createPool({
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "root",
+  password: process.env.DB_PASSWORD || "",
+  database: process.env.DB_NAME || "ecommerce",
+  port: Number(process.env.DB_PORT || 3306),
+  ssl:
+    process.env.DB_SSL === "false"
+      ? undefined
+      : {
+          rejectUnauthorized: false,
+        },
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+  connectTimeout: 15000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
 });
+
+db.on("error", (err) => {
+  console.error("Database pool error:", err.message);
+});
+
+db.getConnection((err, connection) => {
+  if (err) {
+    console.error("DB ERROR", err.message);
+    return;
+  }
+
+  connection.release();
+  console.log("DB Connected");
+});
+
 // REGISTER
 app.post("/register", (req, res) => {
   const { fullname, email, password, phone, location } = req.body;
@@ -820,8 +844,8 @@ app.get("/orders/:order_id/status", async (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(5000, () => {
-    console.log("Server running on port 5000");
+  app.listen(4000, () => {
+    console.log("Server running on port 4000");
     console.log(`MTN API mode: ${MTN.apiMode}`);
     console.log(`MTN environment: ${MTN.environment}`);
     console.log(`MTN useSubscriptionKey: ${MTN.useSubscriptionKey ?? "undefined"}`);
