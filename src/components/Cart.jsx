@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Toast from "./Toast";
-
-const API = "http://localhost:5000";
+import API from "../api";
 
 function formatPhoneInput(value) {
   return value.replace(/[^\d+]/g, "");

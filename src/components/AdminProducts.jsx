@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import API from "../api";
 
 export default function AdminProducts() {
   const [products, setProducts] = useState([]);
@@ -14,7 +15,7 @@ export default function AdminProducts() {
   const [editingId, setEditingId] = useState(null);
 
   const loadProducts = () => {
-    fetch("http://localhost:5000/products")
+    fetch(`${API}/products`)
       .then((res) => res.json())
       .then((data) => setProducts(data))
       .catch((err) => console.log(err));
@@ -50,7 +51,7 @@ export default function AdminProducts() {
     formData.append("stock", form.stock);
     formData.append("image", form.image);
 
-    await fetch("http://localhost:5000/products", {
+    await fetch(`${API}/products`, {
       method: "POST",
       body: formData,
     });
@@ -67,7 +68,7 @@ export default function AdminProducts() {
 
     if (!confirmDelete) return;
 
-    await fetch(`http://localhost:5000/products/${id}`, {
+    await fetch(`${API}/products/${id}`, {
       method: "DELETE",
     });
 
@@ -90,7 +91,7 @@ export default function AdminProducts() {
   // UPDATE PRODUCT
   const updateProduct = async () => {
     await fetch(
-      `http://localhost:5000/products/${editingId}`,
+      `${API}/products/${editingId}`,
       {
         method: "PUT",
         headers: {
@@ -200,7 +201,7 @@ export default function AdminProducts() {
           >
             <div className="flex items-center gap-4">
               <img
-                src={`http://localhost:5000/uploads/${p.image}`}
+                src={`${API}/uploads/${p.image}`}
                 alt={p.product_name}
                 className="w-20 h-20 object-cover rounded"
               />

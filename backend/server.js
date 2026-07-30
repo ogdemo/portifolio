@@ -407,9 +407,16 @@ function handleMomoCallback(req, res) {
 }
 
 const app = express();
+const rootDir = path.resolve(__dirname, "..");
+const clientBuildPath = path.join(rootDir, "dist");
+
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(clientBuildPath));
+}
 
 // DATABASE
 const db = mysql.createPool({

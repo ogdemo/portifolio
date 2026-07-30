@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import API from "../api";
 
 export default function Login({ closeForm }) {
 
@@ -39,8 +40,8 @@ export default function Login({ closeForm }) {
 
     const url =
       mode === "login"
-        ? "http://localhost:5000/login"
-        : "http://localhost:5000/register";
+        ? `${API}/login`
+        : `${API}/register`;
 
 
 

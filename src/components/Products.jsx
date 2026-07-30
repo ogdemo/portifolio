@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import Login from "./Login";
+import API from "../api";
 
 export default function Products({ addToCart }) {
   const [products, setProducts] = useState([]);
   const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
-    fetch("http://localhost:5000/products")
+    fetch(`${API}/products`)
       .then((res) => res.json())
       .then((data) => setProducts(data))
       .catch((err) => console.log(err));
@@ -25,7 +26,7 @@ export default function Products({ addToCart }) {
       product_id: product.product_id,
       name: product.product_name,
       price: product.price,
-      image: `http://localhost:5000/uploads/${product.image}`,
+      image: `${API}/uploads/${product.image}`,
       qty: 1,
     });
   };
@@ -48,7 +49,7 @@ export default function Products({ addToCart }) {
                 className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-300 overflow-hidden"
               >
                 <img
-                  src={`http://localhost:5000/uploads/${product.image}`}
+                  src={`${API}/uploads/${product.image}`}
                   alt={product.product_name}
                   className="w-full h-52 object-cover"
                 />

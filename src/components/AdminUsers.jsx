@@ -2,12 +2,13 @@
 
 
 import { useEffect, useState } from "react";
+import API from "../api";
 
 export default function AdminUsers() {
   const [users, setUsers] = useState([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/users")
+    fetch(`${API}/users`)
       .then(res => res.json())
       .then(data => setUsers(data));
   }, []);

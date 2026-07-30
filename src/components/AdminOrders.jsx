@@ -24,9 +24,7 @@ export default function AdminOrders() {
 
     try {
 
-      const res = await fetch(
-        "http://localhost:5000/orders"
-      );
+      const res = await fetch(`${API}/orders`);
 
       const data = await res.json();
 
@@ -91,7 +89,7 @@ export default function AdminOrders() {
     try {
 
       const res = await fetch(
-        `http://localhost:5000/orders/${id}`,
+        `${API}/orders/${id}`,
         {
           method:"DELETE"
         }
