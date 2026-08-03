@@ -117,6 +117,10 @@ async function fetchMtnSubscriptionKeyFromDb() {
 }
 
 async function loadMtnSubscriptionKey() {
+  if (!MTN.useSubscriptionKey) {
+    return null;
+  }
+
   if (MTN.subscriptionKey && MTN.subscriptionKey !== "YOUR_SUBSCRIPTION_KEY_HERE") {
     return MTN.subscriptionKey;
   }
@@ -151,21 +155,19 @@ async function loadMtnSubscriptionKey() {
 }
 
 async function getAccessToken() {
-  const subscriptionKey = await loadMtnSubscriptionKey();
+  const subscriptionKey = MTN.useSubscriptionKey ? await loadMtnSubscriptionKey() : null;
 
   const headers = {
     "Content-Type": "application/x-www-form-urlencoded",
   };
 
-  if (MTN.shouldUseTokenSubscriptionKey) {
-    if (subscriptionKey) {
-      headers["Ocp-Apim-Subscription-Key"] = subscriptionKey;
-      console.log("Sending MTN token request with Ocp-Apim-Subscription-Key.");
-    } else {
-      console.warn(
-        "MTN_USE_SUBSCRIPTION_KEY=true, but no subscription key was found. Continuing without the header because this MTN product may not require it."
-      );
-    }
+  if (MTN.useSubscriptionKey && subscriptionKey) {
+    headers["Ocp-Apim-Subscription-Key"] = subscriptionKey;
+    console.log("Sending MTN token request with Ocp-Apim-Subscription-Key.");
+  } else if (MTN.useSubscriptionKey) {
+    console.warn(
+      "MTN_USE_SUBSCRIPTION_KEY=true, but no subscription key was found. Continuing without the header because this MTN product may not require it."
+    );
   } else {
     console.log(
       "Skipping Ocp-Apim-Subscription-Key on MTN token request because the configuration does not require it."
@@ -174,7 +176,6 @@ async function getAccessToken() {
 
   console.log("MTN TOKEN REQUEST HEADERS:", JSON.stringify(headers, null, 2));
 
-  // Try token request, retry with subscription key if MTN rejects due to missing key
   try {
     const response = await axios.post(
       `${MTN.apiBase}/${MTN.tokenPath}`,
@@ -194,44 +195,18 @@ async function getAccessToken() {
     const bodyMessage =
       err.response?.data?.message || JSON.stringify(err.response?.data) || err.message;
 
-    // If MTN complains about missing subscription key, attempt a retry with any available key
-    if (
-      status === 401 &&
-      /subscription key/i.test(String(bodyMessage))
-    ) {
-      console.warn("MTN token request failed due to missing subscription key. Attempting retry with subscription key if available...");
-
-      const fallbackKey = await loadMtnSubscriptionKey();
-      if (fallbackKey) {
-        headers["Ocp-Apim-Subscription-Key"] = fallbackKey;
-        console.log("Retrying MTN TOKEN REQUEST with Ocp-Apim-Subscription-Key.", JSON.stringify(headers, null, 2));
-
-        const retryResp = await axios.post(
-          `${MTN.apiBase}/${MTN.tokenPath}`,
-          new URLSearchParams({ grant_type: "client_credentials" }),
-          {
-            auth: {
-              username: MTN.clientId,
-              password: MTN.clientSecret,
-            },
-            headers,
-          }
-        );
-
-        return retryResp.data.access_token;
-      }
-    }
-
-    // If MTN reports a subscription-key issue we log it clearly but do not fail the flow
-    // until we have verified the merchant account and endpoint configuration.
-    if (status === 401 && /subscription key/i.test(String(bodyMessage))) {
+    if (status === 401 && /subscription key/i.test(String(bodyMessage)) && MTN.useSubscriptionKey) {
+      console.warn("MTN token request failed due to a missing subscription key for the configured MTN product.");
       const message =
         "MTN rejected the token request. Verify the merchant account, callback URL, and the endpoint/payload that match your enrolled MTN product.";
       console.error(message, "Details:", bodyMessage);
       throw new MtnConfigError(message + " Details: " + String(bodyMessage));
     }
 
-    // rethrow original error if we couldn't handle it
+    if (status === 401 && /subscription key/i.test(String(bodyMessage)) && !MTN.useSubscriptionKey) {
+      console.warn("This MTN setup does not require a subscription key. Continuing without it.");
+    }
+
     throw err;
   }
 }
@@ -443,6 +418,294 @@ db.on("error", (err) => {
   console.error("Database pool error:", err.message);
 });
 
+async function ensureUsersTable() {
+  const createUsersSql = `
+    CREATE TABLE IF NOT EXISTS users (
+      user_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      fullname VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      phone VARCHAR(50) DEFAULT NULL,
+      location VARCHAR(255) DEFAULT NULL,
+      role ENUM('customer', 'admin') NOT NULL DEFAULT 'customer',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id),
+      UNIQUE KEY unique_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `;
+
+  try {
+    await db.promise().query(createUsersSql);
+
+    const [tableCheck] = await db.promise().query("SHOW TABLES LIKE 'users'");
+    if (!tableCheck.length) {
+      console.log("Users table was not created.");
+      return;
+    }
+
+    const [columns] = await db.promise().query("DESCRIBE users");
+    const userIdColumn = columns.find((column) => column.Field === "user_id");
+    const roleColumn = columns.find((column) => column.Field === "role");
+
+    const hasValidUserId =
+      userIdColumn &&
+      /BIGINT/i.test(String(userIdColumn.Type || "")) &&
+      /auto_increment/i.test(String(userIdColumn.Extra || ""));
+
+    const hasValidRole =
+      roleColumn && /enum/i.test(String(roleColumn.Type || ""));
+
+    if (!hasValidUserId || !hasValidRole) {
+      console.log("Users table schema is incompatible. Rebuilding users table with the required columns...");
+
+      const [existingRows] = await db.promise().query("SELECT * FROM users");
+
+      const backupTable = "users_backup_fix_" + Date.now();
+      await db.promise().query(`RENAME TABLE users TO ${backupTable}`);
+
+      try {
+        await db.promise().query(createUsersSql);
+
+        if (existingRows.length) {
+          const columnsToKeep = [
+            "fullname",
+            "email",
+            "password",
+            "phone",
+            "location",
+            "role",
+          ];
+
+          const insertFields = columnsToKeep.join(", ");
+          const insertValues = existingRows
+            .map((row) => {
+              const values = columnsToKeep.map((field) => row[field]);
+              return `(${values
+                .map((value) =>
+                  value === null ? "NULL" : "'" + String(value).replace(/'/g, "''") + "'"
+                )
+                .join(", ")})`;
+            })
+            .join(", ");
+
+          if (insertValues) {
+            await db.promise().query(`INSERT INTO users (${insertFields}) VALUES ${insertValues}`);
+          }
+        }
+      } finally {
+        try {
+          await db.promise().query(`DROP TABLE IF EXISTS ${backupTable}`);
+        } catch (dropError) {
+          console.warn("Could not drop temporary backup table:", dropError.message);
+        }
+      }
+    }
+
+    console.log("Users table ready");
+  } catch (error) {
+    console.error("Failed to ensure users table:", error.message);
+    throw error;
+  }
+}
+
+async function ensureOrdersTable() {
+  const createOrdersSql = `
+    CREATE TABLE IF NOT EXISTS orders (
+      order_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      payment_status VARCHAR(50) DEFAULT 'pending',
+      momo_reference VARCHAR(255) DEFAULT NULL,
+      PRIMARY KEY (order_id),
+      KEY idx_user_id (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `;
+
+  try {
+    await db.promise().query(createOrdersSql);
+
+    const [columns] = await db.promise().query("DESCRIBE orders");
+    const orderIdColumn = columns.find((column) => column.Field === "order_id");
+    const hasValidOrderId =
+      orderIdColumn &&
+      /BIGINT/i.test(String(orderIdColumn.Type || "")) &&
+      /auto_increment/i.test(String(orderIdColumn.Extra || ""));
+
+    if (!hasValidOrderId) {
+      console.log("Orders table schema is incompatible. Rebuilding orders table with the required columns...");
+      const [existingRows] = await db.promise().query("SELECT * FROM orders");
+      const backupTable = "orders_backup_fix_" + Date.now();
+      await db.promise().query(`RENAME TABLE orders TO ${backupTable}`);
+
+      try {
+        await db.promise().query(createOrdersSql);
+
+        if (existingRows.length) {
+          const columnsToKeep = ["user_id", "order_date", "payment_status", "momo_reference"];
+          const insertFields = columnsToKeep.join(", ");
+          const insertValues = existingRows
+            .map((row) => {
+              const values = columnsToKeep.map((field) => row[field]);
+              return `(${values
+                .map((value) =>
+                  value === null ? "NULL" : "'" + String(value).replace(/'/g, "''") + "'"
+                )
+                .join(", ")})`;
+            })
+            .join(", ");
+
+          if (insertValues) {
+            await db.promise().query(`INSERT INTO orders (${insertFields}) VALUES ${insertValues}`);
+          }
+        }
+      } finally {
+        try {
+          await db.promise().query(`DROP TABLE IF EXISTS ${backupTable}`);
+        } catch (dropError) {
+          console.warn("Could not drop temporary orders backup table:", dropError.message);
+        }
+      }
+    }
+
+    console.log("Orders table ready");
+  } catch (error) {
+    console.error("Failed to ensure orders table:", error.message);
+    throw error;
+  }
+}
+
+async function ensureOrderItemsTable() {
+  const createOrderItemsSql = `
+    CREATE TABLE IF NOT EXISTS order_items (
+      item_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      order_id BIGINT UNSIGNED NOT NULL,
+      product_id BIGINT UNSIGNED NOT NULL,
+      quantity INT NOT NULL DEFAULT 1,
+      PRIMARY KEY (item_id),
+      KEY idx_order_id (order_id),
+      KEY idx_product_id (product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `;
+
+  try {
+    await db.promise().query(createOrderItemsSql);
+
+    const [columns] = await db.promise().query("DESCRIBE order_items");
+    const itemIdColumn = columns.find((column) => column.Field === "item_id");
+    const hasValidItemId =
+      itemIdColumn &&
+      /BIGINT/i.test(String(itemIdColumn.Type || "")) &&
+      /auto_increment/i.test(String(itemIdColumn.Extra || ""));
+
+    if (!hasValidItemId) {
+      console.log("Order items table schema is incompatible. Rebuilding order_items table with the required columns...");
+      const [existingRows] = await db.promise().query("SELECT * FROM order_items");
+      const backupTable = "order_items_backup_fix_" + Date.now();
+      await db.promise().query(`RENAME TABLE order_items TO ${backupTable}`);
+
+      try {
+        await db.promise().query(createOrderItemsSql);
+
+        if (existingRows.length) {
+          const columnsToKeep = ["order_id", "product_id", "quantity"];
+          const insertFields = columnsToKeep.join(", ");
+          const insertValues = existingRows
+            .map((row) => {
+              const values = columnsToKeep.map((field) => row[field]);
+              return `(${values
+                .map((value) =>
+                  value === null ? "NULL" : "'" + String(value).replace(/'/g, "''") + "'"
+                )
+                .join(", ")})`;
+            })
+            .join(", ");
+
+          if (insertValues) {
+            await db.promise().query(`INSERT INTO order_items (${insertFields}) VALUES ${insertValues}`);
+          }
+        }
+      } finally {
+        try {
+          await db.promise().query(`DROP TABLE IF EXISTS ${backupTable}`);
+        } catch (dropError) {
+          console.warn("Could not drop temporary order items backup table:", dropError.message);
+        }
+      }
+    }
+
+    console.log("Order items table ready");
+  } catch (error) {
+    console.error("Failed to ensure order_items table:", error.message);
+    throw error;
+  }
+}
+
+async function ensureProductsTable() {
+  const createProductsSql = `
+    CREATE TABLE IF NOT EXISTS products (
+      product_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      product_name VARCHAR(255) NOT NULL,
+      description TEXT,
+      price DECIMAL(10,2) NOT NULL,
+      image VARCHAR(255) DEFAULT NULL,
+      stock INT DEFAULT 0,
+      PRIMARY KEY (product_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `;
+
+  try {
+    await db.promise().query(createProductsSql);
+
+    const [columns] = await db.promise().query("DESCRIBE products");
+    const productIdColumn = columns.find((column) => column.Field === "product_id");
+    const hasValidProductId =
+      productIdColumn &&
+      /BIGINT/i.test(String(productIdColumn.Type || "")) &&
+      /auto_increment/i.test(String(productIdColumn.Extra || ""));
+
+    if (!hasValidProductId) {
+      console.log("Products table schema is incompatible. Rebuilding products table with the required columns...");
+      const [existingRows] = await db.promise().query("SELECT * FROM products");
+      const backupTable = "products_backup_fix_" + Date.now();
+      await db.promise().query(`RENAME TABLE products TO ${backupTable}`);
+
+      try {
+        await db.promise().query(createProductsSql);
+
+        if (existingRows.length) {
+          const columnsToKeep = ["product_name", "description", "price", "image", "stock"];
+          const insertFields = columnsToKeep.join(", ");
+          const insertValues = existingRows
+            .map((row) => {
+              const values = columnsToKeep.map((field) => row[field]);
+              return `(${values
+                .map((value) =>
+                  value === null ? "NULL" : "'" + String(value).replace(/'/g, "''") + "'"
+                )
+                .join(", ")})`;
+            })
+            .join(", ");
+
+          if (insertValues) {
+            await db.promise().query(`INSERT INTO products (${insertFields}) VALUES ${insertValues}`);
+          }
+        }
+      } finally {
+        try {
+          await db.promise().query(`DROP TABLE IF EXISTS ${backupTable}`);
+        } catch (dropError) {
+          console.warn("Could not drop temporary products backup table:", dropError.message);
+        }
+      }
+    }
+
+    console.log("Products table ready");
+  } catch (error) {
+    console.error("Failed to ensure products table:", error.message);
+    throw error;
+  }
+}
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("DB ERROR", err.message);
@@ -451,6 +714,15 @@ db.getConnection((err, connection) => {
 
   connection.release();
   console.log("DB Connected");
+
+  Promise.all([
+    ensureUsersTable(),
+    ensureOrdersTable(),
+    ensureOrderItemsTable(),
+    ensureProductsTable(),
+  ]).catch((error) => {
+    console.error("Startup schema check failed:", error.message);
+  });
 });
 
 // REGISTER
@@ -459,13 +731,26 @@ app.post("/register", (req, res) => {
 
   const checkEmail = "SELECT * FROM users WHERE email = ?";
   db.query(checkEmail, [email], (err, result) => {
-    if (err) return res.status(500).json(err);
+    if (err) {
+      console.error("REGISTER QUERY ERROR:", err);
+      return res.status(500).json({
+        message: "Registration failed due to a database error.",
+        error: err.message,
+      });
+    }
+
     if (result.length > 0) {
       return res.status(400).json({ message: "Email already exists" });
     }
 
     bcrypt.hash(password, 10, (err, hash) => {
-      if (err) return res.status(500).json(err);
+      if (err) {
+        console.error("REGISTER HASH ERROR:", err);
+        return res.status(500).json({
+          message: "Registration failed while securing the password.",
+          error: err.message,
+        });
+      }
 
       const role = "customer";
       const insertUser =
@@ -474,7 +759,13 @@ app.post("/register", (req, res) => {
         insertUser,
         [fullname, email, hash, phone, location, role],
         (err) => {
-          if (err) return res.status(500).json(err);
+          if (err) {
+            console.error("REGISTER INSERT ERROR:", err);
+            return res.status(500).json({
+              message: "Registration failed while saving the user.",
+              error: err.message,
+            });
+          }
           return res.status(200).json({ message: "User added" });
         }
       );

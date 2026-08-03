@@ -25,7 +25,8 @@ export default function Header({ cartCount = 0 }) {
 
   return (
     <>
-      <header className="fixed top-0 left-0 w-full z-50 bg-white/90 backdrop-blur-xl border-b border-slate-200 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
+      <header className="fixed top-0 left-0 w-full z-50 bg-white/90 backdrop-blur-xl 
+      border-b border-slate-200 shadow-[0_8px_30px_rgba(15,23,42,0.06)]">
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
@@ -36,7 +37,8 @@ export default function Header({ cartCount = 0 }) {
               to="/"
               className="flex items-center gap-3 min-w-0"
             >
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600/10 ring-1 ring-emerald-200">
+              <div className="flex h-11 w-11 items-center justify-center 
+              rounded-2xl bg-emerald-600/10 ring-1 ring-emerald-200">
                 <img
                   src={logo}
                   alt="Logo"
@@ -56,7 +58,8 @@ export default function Header({ cartCount = 0 }) {
             </Link>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-7 rounded-full border border-slate-200 bg-white/80 px-5 py-3 shadow-sm">
+            <nav className="hidden md:flex items-center gap-7 rounded-full border
+             border-slate-200 bg-white/80 px-5 py-3 shadow-sm">
 
               <NavLink to="/" className={navStyle}>
                 Home
@@ -84,7 +87,8 @@ export default function Header({ cartCount = 0 }) {
             <div className="flex items-center gap-3 sm:gap-4">
 
               {/* Search */}
-              <div className="hidden lg:flex items-center rounded-full border border-slate-200 bg-slate-50 px-4 py-2 shadow-sm">
+              <div className="hidden lg:flex items-center rounded-full border border-slate-200
+               bg-slate-50 px-4 py-2 shadow-sm">
                 <span className="mr-2 text-slate-400">⌕</span>
                 <input
                   type="text"
