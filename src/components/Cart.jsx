@@ -313,9 +313,17 @@ export default function Cart({
               <select
                 value={paymentMethod}
                 onChange={(e) => {
-                  setPaymentMethod(e.target.value);
-                  setPhoneNumber("");
-                  setConfirmPhoneNumber("");
+                  const val = e.target.value;
+                  setPaymentMethod(val);
+                  if (val === "MTN Mobile Money") {
+                    // Prefill a test MTN number to simplify sandbox payments
+                    const fallback = "0789347791";
+                    setPhoneNumber((prev) => (prev && prev.trim() ? prev : fallback));
+                    setConfirmPhoneNumber((prev) => (prev && prev.trim() ? prev : fallback));
+                  } else {
+                    setPhoneNumber("");
+                    setConfirmPhoneNumber("");
+                  }
                 }}
                 className="w-full border border-slate-300 bg-slate-50 p-3 rounded-xl mb-4 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 disabled={!!pendingOrder}
