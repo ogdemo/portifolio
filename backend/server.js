@@ -829,14 +829,16 @@ app.post("/add-to-cart", (req, res) => {
 
 // GET ORDERS
 app.get("/orders", (req, res) => {
+  // Use LEFT JOIN so orders are returned even if their items failed to insert
+  // (prevents newly-created orders from being invisible in the admin UI).
   const sql = `
     SELECT orders.order_id, orders.order_date, orders.payment_status,
            users.fullname, users.email, users.phone, users.location,
            products.product_name, order_items.quantity
     FROM orders
     JOIN users ON orders.user_id = users.user_id
-    JOIN order_items ON orders.order_id = order_items.order_id
-    JOIN products ON order_items.product_id = products.product_id
+    LEFT JOIN order_items ON orders.order_id = order_items.order_id
+    LEFT JOIN products ON order_items.product_id = products.product_id
     ORDER BY orders.order_date DESC
   `;
   db.query(sql, (err, result) => {
@@ -985,7 +987,14 @@ app.post("/checkout", async (req, res) => {
         async (itemErr) => {
           if (itemErr) {
             console.log("ORDER ITEMS ERROR:", itemErr);
-            return res.status(500).json({ message: "Order items failed" });
+            // Attempt to clean up the previously-created order to avoid
+            // leaving an orphaned order row without items (which would be
+            // invisible to the admin UI when inner joins are used).
+            db.query("DELETE FROM orders WHERE order_id = ?", [orderId], (delErr) => {
+              if (delErr) console.error("Failed to delete orphaned order:", delErr);
+              return res.status(500).json({ message: "Order items failed" });
+            });
+            return;
           }
 
           if (paymentMethod === "Cash on Delivery") {
