@@ -7,6 +7,7 @@ const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const axios = require("axios");
+const nodemailer = require("nodemailer");
 const { v4: uuidv4 } = require("uuid");
 // Update: Rwanda phone numbers must be 10 digits (local) or 12 digits (international '250' prefix — e.g., 25078XXXXXXX).
 // But user asks for 10 digits, revise validation & formatting here:
@@ -766,6 +767,58 @@ async function ensureProductsTable() {
   }
 }
 
+async function ensureContactMessagesTable() {
+  const createContactMessagesSql = `
+    CREATE TABLE IF NOT EXISTS contact_messages (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(255) NOT NULL,
+      email VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `;
+
+  try {
+    await db.promise().query(createContactMessagesSql);
+    console.log("Contact messages table ready");
+  } catch (error) {
+    console.error("Failed to ensure contact messages table:", error.message);
+    throw error;
+  }
+}
+
+async function sendContactEmail({ name, email, message }) {
+  const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "support@mrprotfolio.com";
+  const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "no-reply@mrprotfolio.com";
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const secure = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+
+  if (!host || !user || !pass) {
+    console.warn("Contact email not sent: SMTP credentials are not configured.");
+    return { success: false, reason: "missing_smtp_config" };
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass },
+  });
+
+  await transporter.sendMail({
+    from: fromEmail,
+    to: toEmail,
+    subject: `New contact message from ${name}`,
+    text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+  });
+
+  return { success: true };
+}
+
 db.getConnection((err, connection) => {
   if (err) {
     console.error("DB ERROR", err.message);
@@ -780,6 +833,7 @@ db.getConnection((err, connection) => {
     ensureOrdersTable(),
     ensureOrderItemsTable(),
     ensureProductsTable(),
+    ensureContactMessagesTable(),
   ]).catch((error) => {
     console.error("Startup schema check failed:", error.message);
   });
@@ -831,6 +885,36 @@ app.post("/register", (req, res) => {
       );
     });
   });
+});
+
+// CONTACT MESSAGE
+app.post("/contact", async (req, res) => {
+  const { name, email, message } = req.body;
+
+  if (!name || !email || !message) {
+    return res.status(400).json({ message: "Name, email, and message are required." });
+  }
+
+  try {
+    await db.promise().query(
+      "INSERT INTO contact_messages (name, email, message, created_at) VALUES (?, ?, ?, NOW())",
+      [String(name).trim(), String(email).trim(), String(message).trim()]
+    );
+
+    const emailResult = await sendContactEmail({
+      name: String(name).trim(),
+      email: String(email).trim(),
+      message: String(message).trim(),
+    });
+
+    return res.status(200).json({
+      message: "Message received successfully.",
+      emailSent: emailResult.success,
+    });
+  } catch (error) {
+    console.error("CONTACT MESSAGE ERROR:", error);
+    return res.status(500).json({ message: "Unable to save your message right now.", error: error.message });
+  }
 });
 
 // LOGIN

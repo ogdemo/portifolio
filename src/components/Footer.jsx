@@ -43,11 +43,11 @@ export default function Footer() {
           </p>
 
           <p className="text-sm mt-2">
-            Email: info@greencoffee.com
+            Email: ogdemo23@gmail.com
           </p>
 
           <p className="text-sm mt-2">
-            Phone: +250 700 000 000
+            Phone: +25789347791
           </p>
         </div>
 

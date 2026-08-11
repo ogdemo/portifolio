@@ -11,6 +11,7 @@ import AdminUsers from "./components/AdminUsers";
 import Gallery from "./components/Gallery";
 import Footer from "./components/Footer";
 import AboutUs from "./components/AboutUs";
+import Contact from "./components/Contact";
 import Success from "./components/Success";
 import { Routes, Route } from "react-router-dom";
 
@@ -238,7 +239,7 @@ export default function App() {
             }
           />
 
-
+          <Route path="/contact" element={<Contact />} />
 
           <Route
            path="/dashboard"
