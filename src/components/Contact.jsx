@@ -62,15 +62,15 @@ export default function Contact() {
             <div className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Phone</h2>
-                <p className="mt-1 text-slate-600">+251 912 345 678</p>
+                <p className="mt-1 text-slate-600">+250 7893 477 791</p>
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Email</h2>
-                <p className="mt-1 text-slate-600">support@mrprotfolio.com</p>
+                <p className="mt-1 text-slate-600">ogdemo23@gmail.com</p>
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Location</h2>
-                <p className="mt-1 text-slate-600">Addis Ababa, Ethiopia</p>
+                <p className="mt-1 text-slate-600">Kigali, Rwanda</p>
               </div>
             </div>
           </div>
