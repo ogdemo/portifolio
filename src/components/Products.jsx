@@ -1,10 +1,15 @@
 import { useEffect, useState } from "react";
 import Login from "./Login";
 import API from "../api";
+import { useLocation } from "react-router-dom";
 
 export default function Products({ addToCart }) {
   const [products, setProducts] = useState([]);
   const [showLogin, setShowLogin] = useState(false);
+  const location = useLocation();
+
+  const params = new URLSearchParams(location.search);
+  const categoryParam = params.get("category");
 
   useEffect(() => {
     fetch(`${API}/products`)
@@ -43,7 +48,23 @@ export default function Products({ addToCart }) {
 
           <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
 
-            {products.map((product) => (
+            {(
+              categoryParam
+                ? products.filter((p) => {
+                    const cands = [
+                      p.category,
+                      p.category_slug,
+                      p.category_name,
+                      p.categoryName,
+                      (p.category && p.category.name),
+                    ];
+
+                    return cands.some(
+                      (c) => typeof c === "string" && c.toLowerCase() === categoryParam.toLowerCase()
+                    );
+                  })
+                : products
+            ).map((product) => (
               <div
                 key={product.product_id}
                 className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-300 overflow-hidden"

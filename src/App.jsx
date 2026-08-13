@@ -4,6 +4,7 @@ import Header from "./components/Header";
 import Home from "./components/Home";
 import Cart from "./components/Cart";
 import Products from "./components/Products";
+import ProductDetail from "./components/ProductDetail";
 import Dashboard from "./components/Dashboard";
 import AdminProducts from "./components/AdminProducts";
 import AdminOrders from "./components/AdminOrders";
@@ -223,6 +224,11 @@ export default function App() {
                 addToCart={addToCart}
               />
             }
+          />
+
+          <Route
+            path="/product/:id"
+            element={<ProductDetail addToCart={addToCart} />}
           />
 
 

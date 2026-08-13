@@ -100,7 +100,8 @@ export default function Header({ cartCount = 0 }) {
               {/* Cart */}
               <Link
                 to="/cart"
-                className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
+                className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white
+                 text-2xl shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
                 aria-label="Shopping cart"
               >
                 <span>🛒</span>
