@@ -47,7 +47,11 @@ export default function ProductDetail({ addToCart }) {
     <div className="max-w-6xl mx-auto px-4 py-10">
       <div className="grid md:grid-cols-2 gap-8 bg-white rounded-xl shadow p-6">
         <div>
-          <img src={`${API}/uploads/${product.image}`} alt={product.product_name} className="w-full h-96 object-cover rounded" />
+          <img
+            src={product.image ? `${API}/uploads/${encodeURIComponent(product.image)}` : "/placeholder.png"}
+            alt={product.product_name}
+            className="w-full h-96 object-cover rounded"
+          />
         </div>
 
         <div>

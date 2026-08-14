@@ -54,7 +54,7 @@ export default function Home() {
             {featured.map((p) => (
               <div key={p.product_id} className="bg-white rounded-2xl overflow-hidden shadow group">
                 <img
-                  src={`${API}/uploads/${p.image}`}
+                  src={p.image ? `${API}/uploads/${encodeURIComponent(p.image)}` : "/placeholder.png"}
                   alt={p.product_name}
                   className="w-full h-52 object-cover"
                 />

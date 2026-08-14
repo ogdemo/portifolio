@@ -31,7 +31,7 @@ export default function Products({ addToCart }) {
       product_id: product.product_id,
       name: product.product_name,
       price: product.price,
-      image: `${API}/uploads/${product.image}`,
+      image: product.image ? `${API}/uploads/${encodeURIComponent(product.image)}` : "/placeholder.png",
       qty: 1,
     });
   };
@@ -70,7 +70,7 @@ export default function Products({ addToCart }) {
                 className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-300 overflow-hidden"
               >
                 <img
-                  src={`${API}/uploads/${product.image}`}
+                  src={product.image ? `${API}/uploads/${encodeURIComponent(product.image)}` : "/placeholder.png"}
                   alt={product.product_name}
                   className="w-full h-52 object-cover"
                 />

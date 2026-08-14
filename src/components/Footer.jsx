@@ -47,7 +47,7 @@ export default function Footer() {
           </p>
 
           <p className="text-sm mt-2">
-            Phone: +25789347791
+            Phone: +250789347791
           </p>
         </div>
 
@@ -70,6 +70,10 @@ export default function Footer() {
             <a href="#" className="hover:text-white">
               Twitter
             </a>
+            <h1 className="text-lg font-medium tracking-tight text-slate-500 sm:text-xl">
+              Designed by:
+            </h1>
+            <p className="uppercase font-bold text-slate-900 tracking-[0.22em] text-[11px]">demo</p>
           </div>
         </div>
 
