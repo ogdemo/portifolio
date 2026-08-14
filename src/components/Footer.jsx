@@ -70,10 +70,6 @@ export default function Footer() {
             <a href="#" className="hover:text-white">
               Twitter
             </a>
-            <h1 className="text-lg font-medium tracking-tight text-slate-500 sm:text-xl">
-              Designed by:
-            </h1>
-            <p className="uppercase font-bold text-slate-900 tracking-[0.22em] text-[11px]">demo</p>
           </div>
         </div>
 
@@ -81,8 +77,11 @@ export default function Footer() {
 
 
       {/* Bottom */}
-      <div className="border-t border-gray-700 py-4 text-center text-sm text-gray-400">
-        © {new Date().getFullYear()} Green Coffee. All rights reserved.
+      <div className="border-t border-gray-700 py-6 text-center text-sm text-gray-400">
+        <p>© {new Date().getFullYear()} Green Coffee. All rights reserved.</p>
+        <p className="mt-3 text-xs text-gray-500">
+          Designed by: <span className="text-gray-300 font-semibold">demo</span>
+        </p>
       </div>
 
     </footer>
