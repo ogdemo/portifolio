@@ -201,7 +201,7 @@ export default function AdminProducts() {
           >
             <div className="flex items-center gap-4">
               <img
-                src={p.image ? `${API}/uploads/${encodeURIComponent(p.image)}` : "/placeholder.png"}
+                src={p.image || "/placeholder.png"}
                 alt={p.product_name}
                 className="w-20 h-20 object-cover rounded"
               />

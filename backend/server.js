@@ -6,9 +6,18 @@ const bcrypt = require("bcrypt");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
 const axios = require("axios");
 const nodemailer = require("nodemailer");
 const { v4: uuidv4 } = require("uuid");
+
+// Cloudinary configuration
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 // Update: Rwanda phone numbers must be 10 digits (local) or 12 digits (international '250' prefix — e.g., 25078XXXXXXX).
 // But user asks for 10 digits, revise validation & formatting here:
 
@@ -448,7 +457,6 @@ const clientBuildPath = path.join(rootDir, "dist");
 
 app.use(cors());
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static(clientBuildPath));
@@ -992,26 +1000,67 @@ app.get("/orders", (req, res) => {
 });
 
 // MULTER STORAGE
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + "-" + file.originalname);
-  },
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
 });
-const upload = multer({ storage });
 
 // ADD PRODUCT
-app.post("/products", upload.single("image"), (req, res) => {
-  const { product_name, description, price, stock } = req.body;
-  const image = req.file ? req.file.filename : null;
-  const sql =
-    "INSERT INTO products (product_name, description, price, image, stock) VALUES (?, ?, ?, ?, ?)";
-  db.query(sql, [product_name, description, price, image, stock], (err) => {
-    if (err) return res.status(500).json(err);
-    res.json({ message: "Product added successfully" });
-  });
+app.post("/products", upload.single("image"), async (req, res) => {
+  try {
+    const { product_name, description, price, stock } = req.body;
+    let image = null;
+
+    if (req.file) {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: "mrchicken/products",
+            resource_type: "image",
+          },
+          (error, result) => {
+            if (error) {
+              reject(error);
+            } else {
+              resolve(result);
+            }
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+      image = result.secure_url;
+    }
+
+    const sql = `
+      INSERT INTO products
+      (product_name, description, price, image, stock)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    db.query(
+      sql,
+      [product_name, description, price, image, stock],
+      (err, result) => {
+        if (err) {
+          console.error("PRODUCT INSERT ERROR:", err);
+          return res.status(500).json({
+            message: "Failed to add product",
+            error: err.message,
+          });
+        }
+        res.json({
+          message: "Product added successfully",
+          product_id: result.insertId,
+          image,
+        });
+      }
+    );
+  } catch (error) {
+    console.error("CLOUDINARY UPLOAD ERROR:", error);
+    res.status(500).json({
+      message: "Image upload failed",
+      error: error.message,
+    });
+  }
 });
 
 // DELETE ORDER

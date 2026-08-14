@@ -35,7 +35,7 @@ export default function ProductDetail({ addToCart }) {
       product_id: product.product_id,
       name: product.product_name,
       price: product.price,
-      image: `${API}/uploads/${product.image}`,
+      image: product.image,
       qty: 1,
     });
   };
@@ -48,7 +48,7 @@ export default function ProductDetail({ addToCart }) {
       <div className="grid md:grid-cols-2 gap-8 bg-white rounded-xl shadow p-6">
         <div>
           <img
-            src={product.image ? `${API}/uploads/${encodeURIComponent(product.image)}` : "/placeholder.png"}
+            src={product.image || "/placeholder.png"}
             alt={product.product_name}
             className="w-full h-96 object-cover rounded"
           />
