@@ -1,14 +1,33 @@
-import { useState } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import logo from "../assets/react.svg";
 import Login from "./Login";
 
 export default function Header({ cartCount = 0 }) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [search, setSearch] = useState(() => new URLSearchParams(location.search).get("search") || "");
+
+  useEffect(() => {
+    setSearch(new URLSearchParams(location.search).get("search") || "");
+  }, [location.search]);
+
+  useEffect(() => {
+    const query = search.trim();
+    const currentQuery = new URLSearchParams(location.search).get("search") || "";
+
+    if (query === currentQuery) return undefined;
+
+    const timer = setTimeout(() => {
+      navigate(query ? `/products?search=${encodeURIComponent(query)}` : "/products");
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [location.search, navigate, search]);
 
   const user = JSON.parse(localStorage.getItem("user"));
 
@@ -16,6 +35,12 @@ export default function Header({ cartCount = 0 }) {
     localStorage.removeItem("user");
     localStorage.removeItem("token");
     navigate("/");
+  };
+
+  const submitSearch = (event) => {
+    event.preventDefault();
+    const query = search.trim();
+    navigate(query ? `/products?search=${encodeURIComponent(query)}` : "/products");
   };
 
   const navStyle = ({ isActive }) =>
@@ -87,20 +112,27 @@ export default function Header({ cartCount = 0 }) {
             <div className="flex items-center gap-3 sm:gap-4">
 
               {/* Search */}
-              <div className="hidden lg:flex items-center rounded-full border border-slate-200
-               bg-slate-50 px-4 py-2 shadow-sm">
+              <form
+                onSubmit={submitSearch}
+                className="hidden lg:flex items-center rounded-full border border-slate-200
+                 bg-slate-50 px-4 py-2 shadow-sm"
+              >
                 <span className="mr-2 text-slate-400">⌕</span>
                 <input
                   type="text"
                   placeholder="Search products..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  aria-label="Search products"
                   className="w-64 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
                 />
-              </div>
+              </form>
 
               {/* Cart */}
               <Link
                 to="/cart"
-                className="relative flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white
+                className="relative flex h-11 w-11 items-center justify-center
+                 rounded-full border border-slate-200 bg-white
                  text-2xl shadow-sm transition hover:border-emerald-300 hover:text-emerald-700"
                 aria-label="Shopping cart"
               >
@@ -117,7 +149,9 @@ export default function Header({ cartCount = 0 }) {
               {!user ? (
                 <button
                   onClick={() => setShowForm(true)}
-                  className="hidden md:inline-flex items-center justify-center rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                  className="hidden md:inline-flex items-center justify-center rounded-full
+                   bg-emerald-600 px-5   py-2.5 text-sm font-semibold text-white shadow-sm transition
+                    hover:bg-emerald-700"
                 >
                   Login
                 </button>
@@ -128,15 +162,18 @@ export default function Header({ cartCount = 0 }) {
                     onClick={() =>
                       setDropdownOpen(!dropdownOpen)
                     }
-                    className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1.5 shadow-sm transition hover:border-emerald-300"
+                    className="flex items-center gap-2 rounded-full border border-slate-200
+                     bg-white px-2 py-1.5 shadow-sm transition hover:border-emerald-300"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-600 text-sm font-bold text-white">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full
+                     bg-emerald-600 text-sm font-bold text-white">
                       {user.fullname?.charAt(0).toUpperCase()}
                     </div>
                   </button>
 
                   {dropdownOpen && (
-                    <div className="absolute right-0 mt-3 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="absolute right-0 mt-3 w-64 overflow-hidden 
+                    rounded-2xl border border-slate-200 bg-white shadow-2xl">
 
                       <div className="border-b border-slate-100 p-4">
                         <h3 className="font-semibold text-slate-900">
@@ -198,6 +235,18 @@ export default function Header({ cartCount = 0 }) {
           <div className="border-t border-slate-200 bg-white/95 md:hidden shadow-lg backdrop-blur-xl">
 
             <div className="mx-auto flex max-w-7xl flex-col gap-2 p-4">
+
+              <form onSubmit={submitSearch} className="mb-2 flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                <span className="mr-2 text-slate-400">⌕</span>
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  aria-label="Search products"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                />
+              </form>
 
               <Link to="/" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
                 Home
