@@ -443,6 +443,15 @@ function handleMomoCallback(req, res) {
       }
 
       console.log("Payment updated:", referenceId, paymentStatus);
+      if (paymentStatus === "PAID") {
+        db.query("SELECT order_id FROM orders WHERE momo_reference = ? LIMIT 1", [referenceId], (lookupErr, rows) => {
+          if (lookupErr) {
+            console.error("Could not find paid order for notification:", lookupErr.message);
+            return;
+          }
+          if (rows[0]) notifyOwnerAboutOrder(rows[0].order_id, "PAID");
+        });
+      }
       return res.json({ ok: true, payment_status: paymentStatus });
     });
   } catch (err) {
@@ -797,7 +806,7 @@ async function ensureContactMessagesTable() {
 }
 
 async function sendContactEmail({ name, email, message }) {
-  const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "support@mrprotfolio.com";
+  const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "ogdemo23@gmail.com";
   const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "no-reply@mrprotfolio.com";
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
@@ -825,6 +834,105 @@ async function sendContactEmail({ name, email, message }) {
   });
 
   return { success: true };
+}
+
+function getOwnerWhatsAppNumber() {
+  const digits = String(process.env.WHATSAPP_TO || "0789347791").replace(/\D/g, "");
+  return digits.startsWith("0") ? `250${digits.slice(1)}` : digits;
+}
+
+async function sendWhatsAppMessage(message) {
+  const accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+  if (!accessToken || !phoneNumberId) {
+    console.warn("WhatsApp notification not sent: WHATSAPP_ACCESS_TOKEN or WHATSAPP_PHONE_NUMBER_ID is missing.");
+    return { success: false, reason: "missing_whatsapp_config" };
+  }
+
+  const apiVersion = process.env.WHATSAPP_API_VERSION || "v23.0";
+  await axios.post(
+    `https://graph.facebook.com/${apiVersion}/${phoneNumberId}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: getOwnerWhatsAppNumber(),
+      type: "text",
+      text: { preview_url: false, body: message },
+    },
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+
+  return { success: true };
+}
+
+async function sendOwnerEmail(subject, text) {
+  const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "ogdemo23@gmail.com";
+  const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "no-reply@mrprotfolio.com";
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const secure = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+
+  if (!host || !user || !pass) {
+    console.warn("Email notification not sent: SMTP credentials are not configured.");
+    return { success: false, reason: "missing_smtp_config" };
+  }
+
+  const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
+  await transporter.sendMail({ from: fromEmail, to: toEmail, subject, text });
+  return { success: true };
+}
+
+async function getOrderNotificationData(orderId) {
+  const [rows] = await db.promise().query(`
+    SELECT orders.order_id, orders.order_date, orders.payment_status, orders.momo_reference,
+           users.fullname, users.email, users.phone, users.location,
+           products.product_name, products.price, order_items.quantity
+    FROM orders
+    JOIN users ON orders.user_id = users.user_id
+    LEFT JOIN order_items ON orders.order_id = order_items.order_id
+    LEFT JOIN products ON order_items.product_id = products.product_id
+    WHERE orders.order_id = ?
+  `, [orderId]);
+
+  if (!rows.length) return null;
+  const order = rows[0];
+  const items = rows
+    .filter((row) => row.product_name)
+    .map((row) => `${row.product_name} x${row.quantity} = ${(Number(row.price) * Number(row.quantity)).toLocaleString()} RWF`);
+  const total = rows.reduce((sum, row) => sum + (Number(row.price) * Number(row.quantity)), 0);
+
+  return { order, items, total };
+}
+
+async function notifyOwnerAboutOrder(orderId, paymentStatus) {
+  try {
+    const details = await getOrderNotificationData(orderId);
+    if (!details) return;
+    const { order, items, total } = details;
+    const text = [
+      `New order #${order.order_id}`,
+      `Customer: ${order.fullname}`,
+      `Email: ${order.email}`,
+      `Phone: ${order.phone || "Not provided"}`,
+      `Delivery location: ${order.location || "Not provided"}`,
+      `Payment: ${paymentStatus}`,
+      `Total: ${total.toLocaleString()} RWF`,
+      `Items: ${items.join("; ") || "No item details"}`,
+      `Reference: ${order.momo_reference || "N/A"}`,
+    ].join("\n");
+
+    const results = await Promise.allSettled([
+      sendOwnerEmail(`New order #${order.order_id} from ${order.fullname}`, text),
+      sendWhatsAppMessage(text),
+    ]);
+    results.forEach((result) => {
+      if (result.status === "rejected") console.error("Order notification failed:", result.reason?.message || result.reason);
+    });
+  } catch (error) {
+    console.error("ORDER NOTIFICATION ERROR:", error.message);
+  }
 }
 
 db.getConnection((err, connection) => {
@@ -914,10 +1022,18 @@ app.post("/contact", async (req, res) => {
       email: String(email).trim(),
       message: String(message).trim(),
     });
+    const whatsappResult = await sendWhatsAppMessage([
+      "New contact message",
+      `Name: ${String(name).trim()}`,
+      `Email: ${String(email).trim()}`,
+      "",
+      String(message).trim(),
+    ].join("\n"));
 
     return res.status(200).json({
       message: "Message received successfully.",
       emailSent: emailResult.success,
+      whatsappSent: whatsappResult.success,
     });
   } catch (error) {
     console.error("CONTACT MESSAGE ERROR:", error);
@@ -1114,7 +1230,7 @@ app.put("/products/:id", (req, res) => {
 
 // CHECKOUT
 app.post("/checkout", async (req, res) => {
-  const { user_id, cartItems, phoneNumber, paymentMethod } = req.body;
+  let { user_id, cartItems, phoneNumber, paymentMethod } = req.body;
 
   console.log("CHECKOUT REQUEST", {
     user_id,
@@ -1195,6 +1311,7 @@ app.post("/checkout", async (req, res) => {
           }
 
           if (paymentMethod === "Cash on Delivery") {
+            notifyOwnerAboutOrder(orderId, "COD");
             return res.json({
               message: "Order placed successfully",
               orderId,
@@ -1238,6 +1355,7 @@ app.post("/checkout", async (req, res) => {
                   "UPDATE orders SET payment_status = 'PAID' WHERE order_id = ?",
                   [orderId]
                 );
+                notifyOwnerAboutOrder(orderId, "PAID");
 
                 return res.json({
                   message: "Sandbox: marked order as PAID (subscription key missing).",
@@ -1347,6 +1465,7 @@ app.get("/orders/:order_id/status", async (req, res) => {
               [mapped, orderId]
             );
             order.payment_status = mapped;
+            if (mapped === "PAID") notifyOwnerAboutOrder(orderId, "PAID");
           }
         }
       } catch (pollError) {
