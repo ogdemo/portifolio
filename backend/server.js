@@ -930,18 +930,16 @@ async function notifyOwnerAboutOrder(orderId, paymentStatus, isPaymentUpdate = f
       `Reference: ${order.momo_reference || "N/A"}`,
     ].join("\n");
 
-    const results = await Promise.allSettled([
-      sendOwnerEmail(
-        isPaymentUpdate
-          ? `Payment update for order #${order.order_id}: ${paymentStatus}`
-          : `New order #${order.order_id} from ${order.fullname}`,
-        text
-      ),
-      sendWhatsAppMessage(text),
-    ]);
-    results.forEach((result) => {
-      if (result.status === "rejected") console.error("Order notification failed:", result.reason?.message || result.reason);
-    });
+    const emailResult = await sendOwnerEmail(
+      isPaymentUpdate
+        ? `Payment update for order #${order.order_id}: ${paymentStatus}`
+        : `New order #${order.order_id} from ${order.fullname}`,
+      text
+    );
+
+    if (emailResult?.success === false) {
+      console.warn("Order email notification was not sent:", emailResult.reason);
+    }
   } catch (error) {
     console.error("ORDER NOTIFICATION ERROR:", error.message);
   }
@@ -1034,18 +1032,11 @@ app.post("/contact", async (req, res) => {
       email: String(email).trim(),
       message: String(message).trim(),
     });
-    const whatsappResult = await sendWhatsAppMessage([
-      "New contact message",
-      `Name: ${String(name).trim()}`,
-      `Email: ${String(email).trim()}`,
-      "",
-      String(message).trim(),
-    ].join("\n"));
 
     return res.status(200).json({
       message: "Message received successfully.",
       emailSent: emailResult.success,
-      whatsappSent: whatsappResult.success,
+      whatsappSent: false,
     });
   } catch (error) {
     console.error("CONTACT MESSAGE ERROR:", error);
