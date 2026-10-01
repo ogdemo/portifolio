@@ -829,22 +829,27 @@ async function sendContactEmail({ name, email, message }) {
     return { success: false, reason: "missing_smtp_config" };
   }
 
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: { user, pass },
-  });
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    });
 
-  await transporter.sendMail({
-    from: fromEmail,
-    to: toEmail,
-    subject: `New contact message from ${name}`,
-    text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
-  });
+    await transporter.sendMail({
+      from: fromEmail,
+      to: toEmail,
+      subject: `New contact message from ${name}`,
+      text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+    });
 
-  console.log(`Contact email sent to ${toEmail}`);
-  return { success: true };
+    console.log(`Contact email sent to ${toEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error("CONTACT EMAIL SEND ERROR:", error.message || error);
+    return { success: false, reason: error.message || "email_send_failed" };
+  }
 }
 
 function getOwnerWhatsAppNumber() {
@@ -1027,20 +1032,63 @@ app.post("/contact", async (req, res) => {
       [String(name).trim(), String(email).trim(), String(message).trim()]
     );
 
-    const emailResult = await sendContactEmail({
-      name: String(name).trim(),
-      email: String(email).trim(),
-      message: String(message).trim(),
-    });
+    let emailResult = { success: false, reason: "not_attempted" };
+
+    try {
+      emailResult = await sendContactEmail({
+        name: String(name).trim(),
+        email: String(email).trim(),
+        message: String(message).trim(),
+      });
+    } catch (mailError) {
+      console.error("CONTACT EMAIL FLOW ERROR:", mailError.message || mailError);
+      emailResult = { success: false, reason: mailError.message || "email_send_failed" };
+    }
 
     return res.status(200).json({
       message: "Message received successfully.",
-      emailSent: emailResult.success,
+      emailSent: !!emailResult.success,
       whatsappSent: false,
+      emailError: emailResult.success ? undefined : emailResult.reason,
     });
   } catch (error) {
     console.error("CONTACT MESSAGE ERROR:", error);
     return res.status(500).json({ message: "Unable to save your message right now.", error: error.message });
+  }
+});
+
+// DEBUG: send a real test email using the same SMTP configuration
+app.get("/debug/test-email", async (req, res) => {
+  const { toEmail, host, user, pass } = getSmtpConfig();
+
+  if (!host || !user || !pass) {
+    return res.status(500).json({
+      ok: false,
+      message: "SMTP is not configured.",
+      to: toEmail,
+    });
+  }
+
+  try {
+    const result = await sendOwnerEmail(
+      "Render SMTP test email",
+      `This is a test message from the MrChicken backend.\n\nTo: ${toEmail}\nHost: ${host}\nUser: ${user}`
+    );
+
+    return res.status(result.success ? 200 : 500).json({
+      ok: !!result.success,
+      message: result.success ? "Test email sent successfully." : "SMTP test email failed.",
+      to: toEmail,
+      reason: result.reason,
+    });
+  } catch (error) {
+    console.error("DEBUG TEST EMAIL ERROR:", error);
+    return res.status(500).json({
+      ok: false,
+      message: "Test email failed.",
+      to: toEmail,
+      error: error.message,
+    });
   }
 });
 

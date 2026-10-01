@@ -62,7 +62,7 @@ export default function Contact() {
             <div className="mt-8 space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Phone</h2>
-                <p className="mt-1 text-slate-600">+250 7893 477 791</p>
+                <p className="mt-1 text-slate-600">+250 7893 47 791</p>
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Email</h2>
