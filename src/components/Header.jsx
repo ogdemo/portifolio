@@ -45,8 +45,8 @@ export default function Header({ cartCount = 0 }) {
 
   const navStyle = ({ isActive }) =>
     isActive
-      ? "text-emerald-700 font-semibold relative after:absolute after:left-0 after:-bottom-1 after:h-0.5 after:w-full after:rounded-full after:bg-emerald-600"
-      : "text-slate-600 hover:text-emerald-700 transition-colors duration-200";
+        ? "text-emerald-700 font-bold relative after:absolute after:left-0 after:w-full after:h-0.5 after:-bottom-1 after:rounded-full after:bg-white-500"
+        : "text-slate-500 hover:text-slate-700 transition-colors duration-200";
 
   return (
     <>
@@ -139,7 +139,8 @@ export default function Header({ cartCount = 0 }) {
                 <span>🛒</span>
 
                 {cartCount > 0 && (
-                  <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold text-white">
+                  <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full
+                   bg-rose-500 px-1 text-[10px] font-semibold text-white">
                     {cartCount}
                   </span>
                 )}

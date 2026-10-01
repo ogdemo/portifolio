@@ -52,12 +52,14 @@ export default function Home() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
             {featured.map((p) => (
-              <div key={p.product_id} className="bg-white rounded-2xl overflow-hidden shadow group">
-                <img
-                  src={p.image || "/placeholder.png"}
-                  alt={p.product_name}
-                  className="w-full h-52 object-cover"
-                />
+              <div key={p.product_id} className="group bg-white rounded-2xl overflow-hidden shadow transition duration-300 hover:shadow-xl">
+                <div className="overflow-hidden">
+                  <img
+                    src={p.image || "/placeholder.png"}
+                    alt={p.product_name}
+                    className="w-full h-52 object-cover transition duration-500 group-hover:scale-110 group-hover:brightness-95"
+                  />
+                </div>
 
                 <div className="p-4">
                   <h3 className="text-lg font-semibold text-gray-800">{p.product_name}</h3>

@@ -138,13 +138,15 @@ export default function Products({ addToCart }) {
             {visibleProducts.map((product) => (
               <div
                 key={product.product_id}
-                className="bg-white rounded-xl shadow-md hover:shadow-xl transition duration-300 overflow-hidden"
+                className="group bg-white rounded-xl shadow-md transition duration-300 hover:shadow-xl overflow-hidden"
               >
-                <img
-                  src={product.image || "/placeholder.png"}
-                  alt={product.product_name}
-                  className="w-full h-52 object-cover"
-                />
+                <div className="overflow-hidden">
+                  <img
+                    src={product.image || "/placeholder.png"}
+                    alt={product.product_name}
+                    className="w-full h-52 object-cover transition duration-500 group-hover:scale-110 group-hover:brightness-95"
+                  />
+                </div>
 
                 <div className="p-4">
 

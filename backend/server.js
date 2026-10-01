@@ -449,7 +449,7 @@ function handleMomoCallback(req, res) {
             console.error("Could not find paid order for notification:", lookupErr.message);
             return;
           }
-          if (rows[0]) notifyOwnerAboutOrder(rows[0].order_id, "PAID");
+          if (rows[0]) notifyOwnerAboutOrder(rows[0].order_id, "PAID", true);
         });
       }
       return res.json({ ok: true, payment_status: paymentStatus });
@@ -805,14 +805,24 @@ async function ensureContactMessagesTable() {
   }
 }
 
-async function sendContactEmail({ name, email, message }) {
+function normalizeSmtpPass(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function getSmtpConfig() {
   const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "ogdemo23@gmail.com";
-  const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "no-reply@mrprotfolio.com";
+  const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "ogdemo23@gmail.com";
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const pass = normalizeSmtpPass(process.env.SMTP_PASS);
   const secure = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+
+  return { toEmail, fromEmail, host, port, user, pass, secure };
+}
+
+async function sendContactEmail({ name, email, message }) {
+  const { toEmail, fromEmail, host, port, user, pass, secure } = getSmtpConfig();
 
   if (!host || !user || !pass) {
     console.warn("Contact email not sent: SMTP credentials are not configured.");
@@ -833,6 +843,7 @@ async function sendContactEmail({ name, email, message }) {
     text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
   });
 
+  console.log(`Contact email sent to ${toEmail}`);
   return { success: true };
 }
 
@@ -866,13 +877,7 @@ async function sendWhatsAppMessage(message) {
 }
 
 async function sendOwnerEmail(subject, text) {
-  const toEmail = process.env.CONTACT_EMAIL_TO || process.env.SMTP_TO || process.env.EMAIL_TO || "ogdemo23@gmail.com";
-  const fromEmail = process.env.CONTACT_EMAIL_FROM || process.env.SMTP_FROM || process.env.EMAIL_FROM || "no-reply@mrprotfolio.com";
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const secure = String(process.env.SMTP_SECURE || "false").toLowerCase() === "true";
+  const { toEmail, fromEmail, host, port, user, pass, secure } = getSmtpConfig();
 
   if (!host || !user || !pass) {
     console.warn("Email notification not sent: SMTP credentials are not configured.");
@@ -881,6 +886,8 @@ async function sendOwnerEmail(subject, text) {
 
   const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
   await transporter.sendMail({ from: fromEmail, to: toEmail, subject, text });
+
+  console.log(`Owner email sent to ${toEmail}`);
   return { success: true };
 }
 
@@ -906,7 +913,7 @@ async function getOrderNotificationData(orderId) {
   return { order, items, total };
 }
 
-async function notifyOwnerAboutOrder(orderId, paymentStatus) {
+async function notifyOwnerAboutOrder(orderId, paymentStatus, isPaymentUpdate = false) {
   try {
     const details = await getOrderNotificationData(orderId);
     if (!details) return;
@@ -924,7 +931,12 @@ async function notifyOwnerAboutOrder(orderId, paymentStatus) {
     ].join("\n");
 
     const results = await Promise.allSettled([
-      sendOwnerEmail(`New order #${order.order_id} from ${order.fullname}`, text),
+      sendOwnerEmail(
+        isPaymentUpdate
+          ? `Payment update for order #${order.order_id}: ${paymentStatus}`
+          : `New order #${order.order_id} from ${order.fullname}`,
+        text
+      ),
       sendWhatsAppMessage(text),
     ]);
     results.forEach((result) => {
@@ -1310,8 +1322,9 @@ app.post("/checkout", async (req, res) => {
             return;
           }
 
+          notifyOwnerAboutOrder(orderId, initialStatus);
+
           if (paymentMethod === "Cash on Delivery") {
-            notifyOwnerAboutOrder(orderId, "COD");
             return res.json({
               message: "Order placed successfully",
               orderId,
@@ -1355,7 +1368,7 @@ app.post("/checkout", async (req, res) => {
                   "UPDATE orders SET payment_status = 'PAID' WHERE order_id = ?",
                   [orderId]
                 );
-                notifyOwnerAboutOrder(orderId, "PAID");
+                notifyOwnerAboutOrder(orderId, "PAID", true);
 
                 return res.json({
                   message: "Sandbox: marked order as PAID (subscription key missing).",
@@ -1465,7 +1478,7 @@ app.get("/orders/:order_id/status", async (req, res) => {
               [mapped, orderId]
             );
             order.payment_status = mapped;
-            if (mapped === "PAID") notifyOwnerAboutOrder(orderId, "PAID");
+            if (mapped === "PAID") notifyOwnerAboutOrder(orderId, "PAID", true);
           }
         }
       } catch (pollError) {
