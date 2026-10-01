@@ -8,8 +8,10 @@ const jwt = require("jsonwebtoken");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
 const axios = require("axios");
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 const { v4: uuidv4 } = require("uuid");
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Cloudinary configuration
 cloudinary.config({
@@ -822,30 +824,36 @@ function getSmtpConfig() {
 }
 
 async function sendContactEmail({ name, email, message }) {
-  const { toEmail, fromEmail, host, port, user, pass, secure } = getSmtpConfig();
+  const toEmail = process.env.CONTACT_EMAIL_TO || "ogdemo23@gmail.com";
+  const apiKey = process.env.RESEND_API_KEY;
 
-  if (!host || !user || !pass) {
-    console.warn("Contact email not sent: SMTP credentials are not configured.");
-    return { success: false, reason: "missing_smtp_config" };
+  if (!apiKey) {
+    console.warn("Contact email not sent: RESEND_API_KEY is not configured.");
+    return { success: false, reason: "missing_resend_api_key" };
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-    });
-
-    await transporter.sendMail({
-      from: fromEmail,
-      to: toEmail,
+    const { data, error } = await resend.emails.send({
+      from: "MrChicken <onboarding@resend.dev>",
+      to: [toEmail],
       subject: `New contact message from ${name}`,
       text: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+      html: `
+        <h2>New contact message</h2>
+        <p><strong>Name:</strong> ${String(name).replace(/</g, "&lt;")}</p>
+        <p><strong>Email:</strong> ${String(email).replace(/</g, "&lt;")}</p>
+        <p><strong>Message:</strong></p>
+        <p>${String(message).replace(/</g, "&lt;").replace(/\n/g, "<br />")}</p>
+      `,
     });
 
-    console.log(`Contact email sent to ${toEmail}`);
-    return { success: true };
+    if (error) {
+      console.error("CONTACT EMAIL SEND ERROR:", error);
+      return { success: false, reason: error.message || "email_send_failed" };
+    }
+
+    console.log(`Contact email sent to ${toEmail}; id=${data?.id || "unknown"}`);
+    return { success: true, id: data?.id };
   } catch (error) {
     console.error("CONTACT EMAIL SEND ERROR:", error.message || error);
     return { success: false, reason: error.message || "email_send_failed" };
@@ -882,18 +890,29 @@ async function sendWhatsAppMessage(message) {
 }
 
 async function sendOwnerEmail(subject, text) {
-  const { toEmail, fromEmail, host, port, user, pass, secure } = getSmtpConfig();
+  const toEmail = process.env.CONTACT_EMAIL_TO || "ogdemo23@gmail.com";
+  const apiKey = process.env.RESEND_API_KEY;
 
-  if (!host || !user || !pass) {
-    console.warn("Email notification not sent: SMTP credentials are not configured.");
-    return { success: false, reason: "missing_smtp_config" };
+  if (!apiKey) {
+    console.warn("Email notification not sent: RESEND_API_KEY is not configured.");
+    return { success: false, reason: "missing_resend_api_key" };
   }
 
-  const transporter = nodemailer.createTransport({ host, port, secure, auth: { user, pass } });
-  await transporter.sendMail({ from: fromEmail, to: toEmail, subject, text });
+  const { data, error } = await resend.emails.send({
+    from: "MrChicken <onboarding@resend.dev>",
+    to: [toEmail],
+    subject,
+    text,
+    html: `<p>${String(text).replace(/\n/g, "<br />")}</p>`,
+  });
 
-  console.log(`Owner email sent to ${toEmail}`);
-  return { success: true };
+  if (error) {
+    console.error("OWNER EMAIL SEND ERROR:", error);
+    return { success: false, reason: error.message || "email_send_failed" };
+  }
+
+  console.log(`Owner email sent to ${toEmail}; id=${data?.id || "unknown"}`);
+  return { success: true, id: data?.id };
 }
 
 async function getOrderNotificationData(orderId) {
@@ -1057,29 +1076,47 @@ app.post("/contact", async (req, res) => {
   }
 });
 
-// DEBUG: send a real test email using the same SMTP configuration
+// DEBUG: send a real test email using the Resend API
 app.get("/debug/test-email", async (req, res) => {
-  const { toEmail, host, user, pass } = getSmtpConfig();
+  const toEmail = process.env.CONTACT_EMAIL_TO || "ogdemo23@gmail.com";
+  const apiKey = process.env.RESEND_API_KEY;
 
-  if (!host || !user || !pass) {
+  if (!apiKey) {
     return res.status(500).json({
       ok: false,
-      message: "SMTP is not configured.",
+      message: "RESEND_API_KEY is not configured.",
       to: toEmail,
     });
   }
 
   try {
-    const result = await sendOwnerEmail(
-      "Render SMTP test email",
-      `This is a test message from the MrChicken backend.\n\nTo: ${toEmail}\nHost: ${host}\nUser: ${user}`
-    );
+    const { data, error } = await resend.emails.send({
+      from: "MrChicken <onboarding@resend.dev>",
+      to: [toEmail],
+      subject: "MrChicken Resend Email Test",
+      html: `
+        <h2>MrChicken Email Test</h2>
+        <p>This is a test notification from your backend.</p>
+        <p>Your email system is working correctly.</p>
+      `,
+      text: "This is a test notification from your backend. Your email system is working correctly.",
+    });
 
-    return res.status(result.success ? 200 : 500).json({
-      ok: !!result.success,
-      message: result.success ? "Test email sent successfully." : "SMTP test email failed.",
+    if (error) {
+      console.error("RESEND DEBUG TEST ERROR:", error);
+      return res.status(500).json({
+        ok: false,
+        message: "Test email failed.",
+        to: toEmail,
+        error,
+      });
+    }
+
+    return res.json({
+      ok: true,
+      message: "Test email sent successfully.",
       to: toEmail,
-      reason: result.reason,
+      id: data?.id,
     });
   } catch (error) {
     console.error("DEBUG TEST EMAIL ERROR:", error);
