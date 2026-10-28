@@ -73,7 +73,7 @@ export default function Header({ cartCount = 0 }) {
 
               <div className="min-w-0">
                 <h1 className="text-lg font-bold tracking-tight text-slate-900 sm:text-xl">
-                  Mr-Demo
+                  Mr-Demo_dev
                 </h1>
 
                 <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-500">
